@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pandas
+python-multipart
+openai
+python-dotenv
+httpx
+supabase
+stripe
