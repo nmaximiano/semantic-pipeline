@@ -7,3 +7,6 @@ python-dotenv
 httpx
 supabase
 stripe
+psycopg2-binary
+langchain-core
+langchain-openai
