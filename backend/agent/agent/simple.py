@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import time
 from typing import AsyncGenerator
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -95,7 +96,11 @@ class SimpleAgent(BaseAgent):
                     return
 
                 self.alog.round_input(_round, messages)
+                self.alog(f"LLM call start (simple round {_round})")
+                t0 = time.monotonic()
                 response = await self.tool_llm.ainvoke(messages)
+                dt = time.monotonic() - t0
+                self.alog(f"LLM call done (simple round {_round}): {dt:.2f}s")
                 self.alog.round_output(_round, response)
                 messages.append(response)
 

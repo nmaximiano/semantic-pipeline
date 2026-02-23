@@ -1,10 +1,11 @@
 from __future__ import annotations
 import asyncio
 import re as _re
+import time
 from typing import AsyncGenerator
 
 from langchain_core.messages import ToolMessage
-from agent.llm import get_llm
+from agent.llm import get_llm, get_replan_llm
 from agent.memory import get_history, append_turn
 from agent.logger import AgentLogger
 
@@ -70,12 +71,13 @@ def _build_dataset_context(dataset_info, open_datasets, history) -> dict:
     return ctx
 
 
-def _save_turn(session_id, user_message, assistant_response, tools_called):
+def _save_turn(session_id, user_message, assistant_response, tools_called,
+               pending_question=None):
     if not session_id:
         return
     try:
         append_turn(session_id, user_message, assistant_response,
-                    tools_called or None)
+                    tools_called or None, pending_question)
     except Exception:
         pass
 
@@ -139,6 +141,7 @@ class BaseAgent:
 
         self.alog = AgentLogger()
         self.llm = get_llm()
+        self.replan_llm = get_replan_llm()
 
         dataset_id = dataset_info["id"] if dataset_info else None
         self.data_tools = []
@@ -160,6 +163,7 @@ class BaseAgent:
         self._error_streak: dict[str, int] = {}
         self._pending_tool_messages: list = []
         self._cleaned_up = False
+        self._pending_question: str | None = None
 
     async def run(self) -> AsyncGenerator[dict, None]:
         raise NotImplementedError
@@ -182,7 +186,11 @@ class BaseAgent:
                 result = f"Unknown tool: {name}"
             else:
                 try:
+                    self.alog(f"Tool exec start [{name}]")
+                    t0 = time.monotonic()
                     result = await tool_fn.ainvoke(tc["args"])
+                    dt = time.monotonic() - t0
+                    self.alog(f"Tool exec done [{name}]: {dt:.2f}s")
                 except Exception as e:
                     self.alog(f"Tool {name} failed: {e}")
                     result = f"Tool error: {e}"
@@ -231,4 +239,5 @@ class BaseAgent:
             _cancel_events.pop(self.user_id, None)
         self.alog.flush()
         full_response = "\n\n".join(self._message_parts) if self._message_parts else self.final_response
-        _save_turn(self.session_id, self.message, full_response, self.tools_called)
+        _save_turn(self.session_id, self.message, full_response,
+                   self.tools_called, self._pending_question)

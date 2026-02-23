@@ -188,6 +188,26 @@ def make_tools(active_dataset_id: str, user_id: str,
             return str(e)
 
     @tool
+    def rename_columns_tool(renames: dict, dataset: str = "") -> str:
+        """Rename multiple columns at once. Use this instead of rename_column_tool
+        when you need to rename 2 or more columns (e.g. before a join to prefix
+        overlapping column names).
+
+        Parameters:
+          renames: a dict mapping old column names to new column names, e.g.
+                   {"Open": "SPX_Open", "High": "SPX_High", "Low": "SPX_Low"}
+          dataset: filename or ID of the target dataset (defaults to active
+                   dataset if omitted)"""
+        from services import rename_columns as _rename_multi
+        try:
+            did = _resolve(dataset)
+            result = _rename_multi(did, user_id, renames)
+            pairs = ", ".join(f"'{k}' -> '{v}'" for k, v in result["renamed"].items())
+            return f"Renamed {len(result['renamed'])} columns: {pairs}. Columns: {result['columns']}"
+        except ValueError as e:
+            return str(e)
+
+    @tool
     def delete_columns_tool(column_names: list[str], dataset: str = "") -> str:
         """Delete one or more columns from the dataset.
         Use this when the user asks to remove, drop, or delete columns.
@@ -523,8 +543,8 @@ def make_tools(active_dataset_id: str, user_id: str,
         IMPORTANT — before calling this tool:
         1. Sample both datasets to understand their columns.
         2. If any non-key columns share the same name (e.g. both have "Volume",
-           "Open", "Close"), rename them FIRST using rename_column_tool so each
-           name clearly identifies its source dataset. For example:
+           "Open", "Close"), rename them FIRST using rename_columns_tool (plural)
+           so each name clearly identifies its source dataset. For example:
            - "Volume" in BTC dataset → "BTC_Volume"
            - "Volume" in S&P dataset → "SPX_Volume"
            Do NOT rely on the automatic _2 suffix — it produces unclear names.
@@ -662,7 +682,8 @@ def make_tools(active_dataset_id: str, user_id: str,
 
     return [
         sample_rows_tool, column_stats_tool, distribution_tool,
-        rename_column_tool, delete_columns_tool, duplicate_column_tool,
+        rename_column_tool, rename_columns_tool,
+        delete_columns_tool, duplicate_column_tool,
         filter_rows_tool, find_replace_tool, format_values_tool,
         join_datasets_tool, sort_dataset_tool,
         rolling_window_tool, shift_column_tool, column_formula_tool,

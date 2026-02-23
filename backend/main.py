@@ -13,6 +13,9 @@ import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import stripe
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from services import (
     supabase_admin,
@@ -31,7 +34,17 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Please try again later."},
+    )
 
 # Supabase anon client (auth only)
 supabase_url = os.getenv("SUPABASE_URL")
@@ -130,7 +143,8 @@ def read_csv_bytes(contents: bytes, max_rows: int) -> pd.DataFrame:
 # --- Endpoints ---
 
 @app.post("/upload")
-async def upload(file: UploadFile, user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def upload(request: Request, file: UploadFile, user: dict = Depends(get_current_user)):
     log.info(f"Upload: {file.filename}")
     plan = user["plan"]
     limits = PLANS[plan]
@@ -489,7 +503,8 @@ async def download_dataset(dataset_id: str, user: dict = Depends(get_current_use
 
 
 @app.post("/create-checkout-session")
-async def create_checkout_session(user: dict = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def create_checkout_session(request: Request, user: dict = Depends(get_current_user)):
     """Create a Stripe Checkout session for Pro subscription."""
     if user["plan"] == "pro":
         raise HTTPException(status_code=400, detail="Already on Pro plan")
@@ -511,8 +526,8 @@ async def create_checkout_session(user: dict = Depends(get_current_user)):
             payment_method_types=["card"],
             line_items=[{"price": STRIPE_PRO_PRICE_ID, "quantity": 1}],
             mode="subscription",
-            success_url=f"{FRONTEND_URL}/credits/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{FRONTEND_URL}/credits",
+            success_url=f"{FRONTEND_URL}/plans/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{FRONTEND_URL}/plans",
             metadata={"user_id": str(user["id"])},
         )
         return {"url": session.url}
@@ -522,14 +537,15 @@ async def create_checkout_session(user: dict = Depends(get_current_user)):
 
 
 @app.post("/create-portal-session")
-async def create_portal_session(user: dict = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def create_portal_session(request: Request, user: dict = Depends(get_current_user)):
     """Create a Stripe Customer Portal session for managing subscription."""
     if not user.get("stripe_customer_id"):
         raise HTTPException(status_code=400, detail="No billing account")
     try:
         session = stripe.billing_portal.Session.create(
             customer=user["stripe_customer_id"],
-            return_url=f"{FRONTEND_URL}/credits",
+            return_url=f"{FRONTEND_URL}/plans",
         )
         return {"url": session.url}
     except Exception as e:
@@ -910,7 +926,8 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/chat")
-async def chat_endpoint(body: ChatRequest, user: dict = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def chat_endpoint(request: Request, body: ChatRequest, user: dict = Depends(get_current_user)):
     # Verify session ownership
     sess = (
         supabase_admin.table("sessions")
@@ -965,6 +982,10 @@ async def chat_endpoint(body: ChatRequest, user: dict = Depends(get_current_user
 
     async def event_stream():
         from agent.agent import ComplexAgent, SimpleAgent, classify
+        from agent.memory import get_history
+        from agent.logger import log as alog
+
+        alog(f"Chat request: message={body.message[:80]!r}")
 
         # Quick pre-check: if user can't afford even the cheapest query, bail
         # immediately without burning time on the classify LLM call
@@ -972,14 +993,50 @@ async def chat_endpoint(body: ChatRequest, user: dict = Depends(get_current_user
             "p_user_id": str(user["id"]),
             "p_cost": SIMPLE_QUERY_COST,
         }).execute()
+        alog(f"Credit pre-check done")
         if not pre.data["allowed"]:
             yield f"data: {json.dumps({'type': 'error', 'code': 'quota_exceeded', 'credits_used': pre.data.get('credits_used', 0), 'credits_limit': pre.data.get('credits_limit', 0)})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        # Check if previous turn ended with ask_user_tool — resume if so
+        history = get_history(body.session_id)
+        prior_question = None
+        if history and history[-1].get("pending_question"):
+            prior_question = history[-1]["pending_question"]
+
+        if prior_question:
+            alog(f"Resuming after ask_user_tool: {prior_question[:80]!r}")
+            yield f"data: {json.dumps({'type': 'route', 'agent': 'complex'})}\n\n"
+
+            # Deduct complex cost
+            remaining_cost = COMPLEX_QUERY_COST - SIMPLE_QUERY_COST
+            if remaining_cost > 0:
+                result = supabase_admin.rpc("use_message_credits", {
+                    "p_user_id": str(user["id"]),
+                    "p_cost": remaining_cost,
+                }).execute()
+                if not result.data["allowed"]:
+                    yield f"data: {json.dumps({'type': 'error', 'code': 'quota_exceeded', 'credits_used': result.data.get('credits_used', 0), 'credits_limit': result.data.get('credits_limit', 0)})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+
+            agent = ComplexAgent(body.message, dataset_info, user["id"], body.session_id, open_datasets)
+            try:
+                async for event in agent.run_resume(prior_question):
+                    yield f"data: {json.dumps(event)}\n\n"
+            except Exception as e:
+                alog(f"Agent error (resume): {type(e).__name__}: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'code': 'agent_error', 'detail': str(e)})}\n\n"
+            finally:
+                agent.cleanup()
             yield "data: [DONE]\n\n"
             return
 
         agent_type = await classify(
             body.message, dataset_info, open_datasets, body.session_id,
         )
+        alog(f"Routed to: {agent_type}")
         yield f"data: {json.dumps({'type': 'route', 'agent': agent_type})}\n\n"
 
         # Deduct remaining credits (pre-check already deducted SIMPLE_QUERY_COST)
@@ -999,6 +1056,9 @@ async def chat_endpoint(body: ChatRequest, user: dict = Depends(get_current_user
         try:
             async for event in agent.run():
                 yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            alog(f"Agent error: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'code': 'agent_error', 'detail': str(e)})}\n\n"
         finally:
             agent.cleanup()
         yield "data: [DONE]\n\n"

@@ -40,7 +40,8 @@ def get_history(session_id: str) -> list[dict]:
 
 def append_turn(session_id: str,
                 user_message: str, assistant_response: str,
-                tools_used: list[str] | None = None):
+                tools_used: list[str] | None = None,
+                pending_question: str | None = None):
     """Append one conversation turn, trimming from the front if over limit."""
     if not session_id:
         return
@@ -48,6 +49,8 @@ def append_turn(session_id: str,
     entry: dict = {"user": user_message, "assistant": assistant_response}
     if tools_used:
         entry["tools"] = tools_used
+    if pending_question:
+        entry["pending_question"] = pending_question
 
     history = get_history(session_id)
     history.append(entry)

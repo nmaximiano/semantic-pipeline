@@ -1,8 +1,10 @@
 """Triage router — classifies user messages as 'simple' or 'complex'."""
 from __future__ import annotations
+import time
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import get_llm
+from agent.logger import log
 
 
 TRIAGE_PROMPT = """\
@@ -81,12 +83,17 @@ async def classify(
     prompt = TRIAGE_PROMPT.format(context=context)
 
     llm = get_llm()
+    log(f"Classify LLM call start: message={message[:80]!r}")
+    t0 = time.monotonic()
     resp = await llm.ainvoke([
         SystemMessage(content=prompt),
         HumanMessage(content=message),
     ])
+    dt = time.monotonic() - t0
 
     result = (resp.content or "").strip().lower()
+    classification = "complex" if "complex" in result else "simple"
+    log(f"Classify LLM call done: {dt:.2f}s → {classification}")
     if "complex" in result:
         return "complex"
     return "simple"

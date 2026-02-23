@@ -10,6 +10,7 @@ table — no pandas, no load-all-into-memory.
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import re
@@ -523,6 +524,57 @@ def rename_column(dataset_id: str, user_id: str, old_name: str, new_name: str) -
     record_pipeline_step(dataset_id, "rename_column",
                          {"old_name": old_name, "new_name": new_name})
     return {"columns": new_columns, "row_count": ds["row_count"]}
+
+
+def rename_columns(dataset_id: str, user_id: str, renames: dict[str, str]) -> dict:
+    """Rename multiple columns in a single SQL UPDATE.
+
+    renames: dict mapping old_name -> new_name
+    """
+    if not renames:
+        raise ValueError("No renames provided")
+
+    ds = verify_dataset_ownership(dataset_id, user_id)
+    columns = ds["columns"]
+
+    new_names = set(renames.values())
+    for old, new in renames.items():
+        if old not in columns:
+            raise ValueError(f"Column '{old}' does not exist")
+        if new in columns and new not in renames:
+            raise ValueError(f"Column '{new}' already exists")
+        _safe_col(old)
+        _safe_col(new)
+
+    # Build a single SQL expression: strip all old keys, then add all new keys
+    # (data - 'old1' - 'old2' ...) || jsonb_build_object('new1', data->'old1', ...)
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            strip = " - ".join(["%s"] * len(renames))
+            kv_placeholders = ", ".join(["%s, data->%s"] * len(renames))
+            sql = (
+                f"UPDATE dataset_rows "
+                f"SET data = (data - {strip}) || jsonb_build_object({kv_placeholders}) "
+                f"WHERE dataset_id = %s"
+            )
+            params: list = []
+            params.extend(renames.keys())           # keys to strip
+            for new, old in zip(renames.values(), renames.keys()):
+                params.extend([new, old])            # new_name, old_name pairs
+            params.append(dataset_id)
+            cur.execute(sql, params)
+        conn.commit()
+
+    new_columns = columns[:]
+    for old, new in renames.items():
+        new_columns = [new if c == old else c for c in new_columns]
+
+    update_dataset_metadata_sql(dataset_id, new_columns)
+    for old, new in renames.items():
+        record_pipeline_step(dataset_id, "rename_column",
+                             {"old_name": old, "new_name": new})
+    return {"columns": new_columns, "row_count": ds["row_count"],
+            "renamed": renames}
 
 
 def duplicate_column(dataset_id: str, user_id: str, column_name: str,
