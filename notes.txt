@@ -1,1 +1,1 @@
-need agent state to persist between sessions (last ... once infra for agents is figured out)
+create a new pro max plan or something. even more usage, $19 per month.

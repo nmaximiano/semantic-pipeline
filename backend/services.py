@@ -1091,7 +1091,11 @@ def shift_column(dataset_id: str, user_id: str, column_name: str,
 _FORMULA_ALLOWED = re.compile(
     r'^[\w\s\+\-\*\/\(\)\.\,\%]+$'
 )
-_FORMULA_BLOCKED_WORDS = {"import", "exec", "eval", "compile", "__", "lambda", "open", "os", "sys"}
+_FORMULA_BLOCKED_WORDS = {
+    "import", "exec", "eval", "compile", "__", "lambda", "open", "os", "sys",
+    "select", "insert", "update", "delete", "drop", "alter", "create",
+    "union", "truncate", "grant", "revoke", "copy", "execute",
+}
 _FORMULA_BLOCKED_RE = re.compile(
     r'\b(' + '|'.join(re.escape(w) for w in _FORMULA_BLOCKED_WORDS if w != '__') + r')\b|(__)',
 )

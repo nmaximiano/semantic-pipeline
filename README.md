@@ -1,150 +1,167 @@
-# Semantic Pipeline
+# Kwartz
 
-Upload a CSV, pick a text column, write plain-English instructions, and get back your CSV with a new LLM-generated column.
+AI-powered data analysis platform. Upload a dataset, open a session, and chat with an AI agent that analyzes, transforms, and visualizes your data using R — no code required.
 
-## What it does
+## How it works
 
-1. User signs up / logs in (Supabase Auth)
-2. User uploads a CSV
-3. Selects a column to analyze
-4. Writes instructions (e.g. "classify sentiment as positive/neutral/negative")
-5. Names the new output column
-6. System estimates credits needed, deducts upfront
-7. Downloads the original CSV + the new column
+1. Sign up / log in (Supabase Auth)
+2. Create a session from the dashboard
+3. Upload CSV datasets into the session
+4. Chat with an AI agent that writes and executes R code on your data
+5. View results in an interactive table, R console, and plot gallery
+6. Download transformed datasets as CSV
 
-## Stack
+The agent runs R code (dplyr, ggplot2, tidyr, etc.) in-browser via WebR. All data stays client-side in DuckDB-WASM — the backend only handles auth, chat routing, and LLM calls.
 
-- **Backend**: Python, FastAPI, Pandas, OpenRouter API (`openai/gpt-oss-20b:nitro`), Supabase
-- **Frontend**: Next.js (React), Supabase Auth
-- **Database**: Supabase (PostgreSQL)
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| Data engine | DuckDB-WASM (client-side), WebR (in-browser R) |
+| Backend | Python 3.12, FastAPI, OpenRouter (Gemini 2.0 Flash) |
+| Auth | Supabase Auth via `@supabase/ssr` (cookie-based) |
+| Database | Supabase (PostgreSQL) |
+| Payments | Stripe Subscriptions (Free / Pro) |
+
+## Project structure
+
+```
+backend/
+  main.py              # FastAPI endpoints
+  services.py          # Business logic (SQL-based dataset ops)
+  plan_limits.py       # Free/Pro plan constants
+  agent/
+    agent/
+      base.py          # Base agent (R code execution, ask_user)
+      complex.py       # Multi-step plan-and-execute agent
+      simple.py        # Single-turn agent
+      router.py        # LLM-based query classifier
+    config.py          # Agent config
+    llm.py             # OpenRouter client
+    logger.py          # Agent trace logging
+
+frontend/
+  app/
+    page.tsx           # Landing page
+    login/             # Auth (sign in / sign up)
+    dashboard/         # Session list + management
+    sessions/[id]/     # Session workspace (table, chat, plots, R console)
+    plans/             # Subscription management
+  lib/
+    api.ts             # API URL + getAccessToken helper
+    supabase.ts        # Supabase browser client
+    supabase-server.ts # Supabase middleware client
+    useSessionData.ts  # Session auth + data hook
+    useAgentChat.ts    # Chat SSE + message state hook
+    duckdb.ts          # DuckDB-WASM initialization
+    webr.ts            # WebR initialization + R execution
+    webr-duckdb-bridge.ts  # Sync between R and DuckDB
+  middleware.ts        # Auth middleware (protects /dashboard, /sessions, /plans)
+```
 
 ## Setup
 
-### 1. Supabase Setup
+### Prerequisites
 
-1. Create a project at [supabase.com](https://supabase.com)
-2. Go to SQL Editor and run `backend/migrations/001_initial_schema.sql`
-3. Copy your project URL, anon key, and service role key
+- Python 3.12+
+- Node.js 20+
+- A [Supabase](https://supabase.com) project
+- An [OpenRouter](https://openrouter.ai) API key
+- A [Stripe](https://stripe.com) account (test mode is fine)
 
-### 2. Backend
+### 1. Backend
 
 ```bash
 cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env   # then fill in values
 uvicorn main:app --reload --port 8000
 ```
 
-### 3. Frontend
+**Backend env vars** (`backend/.env`):
+| Variable | Description |
+|----------|-------------|
+| `OPENROUTER_API_KEY` | OpenRouter API key |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon/public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `STRIPE_SECRET_KEY` | Stripe secret key |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `FRONTEND_URL` | Frontend URL for CORS + Stripe redirects (default: `http://localhost:3000`) |
+
+### 2. Frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev  # runs on localhost:3000
+npm run dev   # runs on localhost:3000
 ```
 
-### Environment Variables
+Note: the dev/build scripts use `--webpack` (Next.js 16 defaults to Turbopack, which conflicts with the WebR webpack config).
 
-Backend (`backend/.env`):
-```
-OPENROUTER_API_KEY=sk-or-...
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-```
+**Frontend env vars** (`frontend/.env.local`):
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
+| `NEXT_PUBLIC_API_URL` | Backend API URL (default: `http://localhost:8000`) |
 
-Frontend (`frontend/.env.local`):
-```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-```
+### 3. Supabase
 
-## API
+The database schema is managed directly in the Supabase dashboard (SQL Editor). Key tables:
 
-### Public Endpoints
+- `profiles` — user plan, Stripe IDs, usage counters
+- `stripe_events` — webhook idempotency
 
-#### `POST /upload`
-Multipart form with `file` field. Returns column names.
-```json
-{ "columns": ["text", "date", "id"] }
-```
+RPC functions:
+- `use_message_credits(p_user_id, p_cost)` — atomic credit deduction with weekly auto-reset
+- `use_transform_rows(p_user_id, p_rows)` — atomic transform row deduction
 
-#### `POST /preview`
-Multipart form with `file`, `column_name`, `prompt`. Runs one random observation.
-```json
-{ "input": "sample text", "output": "positive" }
+### 4. Stripe webhooks (local dev)
+
+```bash
+stripe listen --forward-to localhost:8000/webhook/stripe
 ```
 
-#### `GET /estimate?rows=500`
-Estimate credits needed for a job.
-```json
-{ "rows": 500, "credits": 10, "cost_usd": 0.10 }
-```
+## API endpoints
 
-### Protected Endpoints (require `Authorization: Bearer <token>`)
+All endpoints except `/health` and `/webhook/stripe` require `Authorization: Bearer <token>`.
 
-#### `GET /balance`
-Get current credit balance.
-```json
-{ "credits": 45, "email": "user@example.com" }
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check (unauthenticated) |
+| `GET` | `/account` | User plan, usage, and limits |
+| `POST` | `/chat` | SSE stream — sends message to AI agent |
+| `POST` | `/chat/result` | Frontend posts R execution results back |
+| `POST` | `/chat/answer` | Frontend posts user answers to agent questions |
+| `POST` | `/chat/cancel` | Cancel running agent |
+| `POST` | `/create-checkout-session` | Start Stripe checkout for Pro |
+| `POST` | `/create-portal-session` | Open Stripe billing portal |
+| `POST` | `/webhook/stripe` | Stripe webhook handler (signature-verified) |
 
-#### `GET /jobs`
-List user's job history.
-```json
-{ "jobs": [{ "id": "...", "status": "completed", "rows_total": 500, ... }] }
-```
+## Agent architecture
 
-#### `POST /analyze`
-Multipart form with `file`, `column_name`, `prompt`, `new_column_name`. Requires auth and sufficient credits. Streams progress as NDJSON.
-```json
-{"progress": 50, "total": 500}
-{"done": true, "csv": "...", "credits_used": 10, "job_id": "..."}
-```
+The chat endpoint classifies each message as **simple** or **complex**:
 
-## Credit System
+- **Simple agent** (2 credits): single-turn R code generation + execution, up to 4 retry rounds
+- **Complex agent** (10 credits): plans a multi-step approach, executes each step, replans after each result, up to 15 rounds. Re-charges 10 credits every 5 rounds for long-running tasks.
 
-- New users get 50 free credits
-- 1 credit = $0.01
-- Tiered pricing based on average text length per row:
+Both agents stream SSE events: `route`, `message`, `r_code`, `r_code_result`, `plan`, `plan_update`, `ask_user`, `error`.
 
-| Tier | Avg chars/row | Credits/row | Example: 10,000 rows |
-|------|--------------|-------------|---------------------|
-| Short | < 500 | 0.01 | 100 credits ($1.00) |
-| Medium | 500 - 2,000 | 0.02 | 200 credits ($2.00) |
-| Long | 2,000+ | 0.04 | 400 credits ($4.00) |
+R code is executed client-side via WebR. The frontend posts execution results back to `/chat/result`, forming a backend-frontend execution loop.
 
-- Credits are deducted upfront before job runs
-- Partial refunds for failed jobs (based on unprocessed rows)
-- Guaranteed profit at every tier (40-50x margin over API costs)
+## Subscription plans
 
-See `CREDIT_SYSTEM.md` for full documentation.
-
-## Batching
-
-The `/analyze` endpoint groups rows into batches to reduce the number of LLM calls. Two constants control batching:
-
-| Constant | Value | Purpose |
+| | Free | Pro ($9/month) |
 |---|---|---|
-| `MAX_BATCH_CHARS` | 40,000 | Max total characters in a single batch prompt |
-| `MAX_BATCH_SIZE` | 50 | Max rows per batch |
+| Messages | 50 / week | 500 / week |
+| Datasets | 5 | Unlimited |
+| Rows per dataset | 100K | 500K |
+| Storage | 50 MB | 1 GB |
+| LLM transforms | Disabled | 500K rows / week |
 
-Rows are greedy-packed: each row is added to the current batch until adding it would exceed either limit, at which point a new batch starts. Empty rows are skipped entirely.
-
-If the LLM returns a response that can't be fully parsed, successfully parsed results are kept and only the missing items are retried individually.
-
-## TODO
-
-- **Output length control**: Need a way to cap LLM output tokens to prevent abuse (e.g. prompt injection causing expensive long responses). `max_tokens` on the API interferes with batch formatting at high batch sizes — need an alternative approach (e.g. post-hoc truncation, per-result validation, or a separate output budget calculation).
-
-## Data limits
-
-These are defined as constants at the top of `backend/main.py` for easy adjustment.
-
-| Limit | Value | Reason |
-|---|---|---|
-| Max file size | 50 MB | Memory safety |
-| Max rows | 50,000 | API cost / time |
-| Max chars per observation | 4,000 | LLM context window |
-| Empty column | Rejected | Nothing to analyze |
+Credits reset weekly from the user's `period_start` timestamp.

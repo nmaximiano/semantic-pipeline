@@ -1,92 +1,115 @@
 from __future__ import annotations
 import json
+import re
 import time
 from typing import AsyncGenerator
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from agent.llm import chat_completion
 from agent.agent.base import BaseAgent
 
 
+def _extract_r_blocks(text: str) -> list[str]:
+    """Extract all ```r ... ``` code blocks from text."""
+    return re.findall(r"```r\s*\n(.*?)```", text, re.DOTALL)
+
+
+R_CAPABILITIES = """\
+You have access to an R environment running in the user's browser via WebR.
+Available R packages: base R, dplyr, tidyr, stringr, lubridate, ggplot2.
+
+When the user asks you to DO something to the data, write R code in ```r blocks.
+The active dataset's variable name is given in the "active_dataset" context \
+(the "name" field). Use this EXACT variable name in your R code and when talking \
+to the user. After transformations, assign the result back to the same variable.
+Other datasets in the R environment are listed under "other_datasets" in the context — \
+reference them by their variable name directly.
+To RENAME a variable: `new_name <- old_name; rm(old_name)`.
+If a variable name is long or awkward, feel free to rename it first.
+
+When the user asks a QUESTION, answer with text. Only write R code if you
+need to compute something or if the user explicitly asks for a transformation.
+
+CRITICAL — ```r blocks are AUTO-EXECUTED:
+Any code you write inside a ```r block will be IMMEDIATELY and AUTOMATICALLY \
+executed in the user's live R environment. There is NO preview or confirmation.
+- If the user asks a hypothetical question ("how would you...", "what steps \
+would you take...", "explain how to...") or explicitly says NOT to take action \
+("don't do it yet", "do not merge", "just explain", "don't make any changes"), \
+respond with TEXT ONLY. Do NOT include any ```r blocks.
+- To show illustrative code examples in an explanation, use ```text blocks \
+or inline `code`. NEVER use ```r for illustrative examples — it WILL execute.
+- When in doubt about whether the user wants action or explanation, default \
+to explanation only (no ```r blocks). You can always ask to confirm.
+- If your response offers to do something or asks whether the user wants you \
+to proceed ("Would you like me to...", "I can help you...", "Let me know \
+which..."), STOP there. Do NOT include any ```r code blocks in that same \
+response. Wait for the user to confirm before writing code.
+
+RULES:
+- Use tidyverse style (dplyr pipes) when appropriate
+- For joins/merges, use dplyr::left_join, inner_join, etc.
+- If a join produces 0 rows, check key formats with str() — mismatched types \
+(e.g. character vs Date) are a common cause.
+- Before doing arithmetic on a column, verify it is numeric. Columns imported \
+from CSV often have commas or percent signs (e.g. "6,941.81", "-0.33%") making \
+them character type. Use as.numeric(gsub("[^0-9.eE-]", "", col)) to clean first.
+- Always assign results back to the same variable if modifying the dataset
+- For read-only inspection, just print the result (it will be captured)
+- Do NOT use install.packages() -- packages are pre-installed
+- Do NOT use file I/O (read.csv, write.csv) -- data is already loaded
+- Keep code concise and correct
+- When using markdown, never use h1 (#) or h2 (##). Use h3 (###) max.
+- When using markdown tables, use at most 2 columns. The chat panel is narrow \
+so wider tables become unreadable. For multi-field comparisons use bullet \
+lists or key: value lines instead.
+- If execution returns an error, do NOT tell the user it succeeded. Report \
+the error and attempt to fix it.
+
+CLEANUP: Remove temporary standalone objects (helper vectors, lookup tables, \
+subsetted data used mid-calculation) with rm() at the end of the code block. \
+KEEP all columns added to the dataset as part of the user's request — these \
+are the result of their work and may be needed in follow-up questions. Only \
+remove intermediate columns that were solely used to compute a final column \
+(e.g. a temp column you mutate twice — drop the intermediate, keep the final). \
+For read-only multi-step analyses, wrap in local({ ... }) so temporaries \
+never enter the global environment.
+
+NEVER wrap mutations/transformations of the active dataset in local({ ... }). \
+Assignments like `df <- df %>% select(...)` must happen at the TOP LEVEL so \
+they persist in the global environment. local() is ONLY for read-only inspection."""
+
+
+# Safety net: detect user messages that explicitly ask for explanation only
+_NO_ACTION_RE = re.compile(
+    r"(?i)\b("
+    r"don'?t\s+(?:do|yet|actually|make|merge|change|execute|run|apply|modify|touch)"
+    r"|do\s+not\s+(?:do|yet|actually|make|merge|change|execute|run|apply|modify|touch)"
+    r"|just\s+(?:explain|tell|describe|outline|list|show\s+me\s+how)"
+    r"|how\s+would\s+you"
+    r"|what\s+(?:steps|approach|would\s+you)"
+    r"|without\s+(?:doing|executing|running|making)"
+    r"|hypothetically"
+    r"|explain\s+(?:how|what|the\s+steps)"
+    r")\b"
+)
+
+
 class SimpleAgent(BaseAgent):
-    MAX_ROUNDS = 6
-    SYSTEM_PROMPT = {
-        "role": "You are a data assistant for Semantic Pipeline.",
-        "instructions": [
-            "Answer questions directly and concisely. Use tools ONLY when "
-            "the user explicitly asks you to DO something or when you need "
-            "to look up data to answer their question.",
-
-            "QUESTIONS vs ACTIONS — this is critical:\n"
-            "- If the user is ASKING a question (how, what, why, can I, "
-            "would, could, is it possible, what would happen, etc.), "
-            "ANSWER the question with words. Do NOT perform mutations.\n"
-            "- 'What would I have to do to merge these two datasets?' → "
-            "Explain the steps. Do NOT start renaming or merging.\n"
-            "- 'How many rows have missing values?' → Use a read-only tool "
-            "to look it up, then answer. Read-only lookups are fine.\n"
-            "- 'Can I filter by date?' → Answer yes/no and explain how. "
-            "Do NOT apply a filter.\n"
-            "- Only perform mutations when the user gives a clear, direct "
-            "command: 'Rename Volume to BTC_Volume', 'Filter rows where "
-            "price > 100', 'Delete the Notes column'.",
-
-            "WHEN IN DOUBT, ASK:\n"
-            "If the user's intent is unclear or could be interpreted "
-            "multiple ways, ask a clarifying question before acting. "
-            "Examples:\n"
-            "- 'Clean up the dates' → Ask: which column and what format?\n"
-            "- 'Fix the data' → Ask: what specifically needs fixing?\n"
-            "- 'Add a moving average' → Ask: which column and what window "
-            "size?\n"
-            "It is always better to ask than to guess wrong.",
-
-            "TOOL USAGE RULES:\n"
-            "- Do NOT call sample_rows or column_stats to 'show' the user "
-            "data — they can already see the table in the UI.\n"
-            "- Only use read-only tools when YOU genuinely need the "
-            "information to complete a task (e.g. checking exact column "
-            "names before writing a formula, or answering a question about "
-            "data values).\n"
-            "- NEVER end your turn with a tool call. After all tools are "
-            "done, always finish with a plain-text summary of what was "
-            "accomplished.\n"
-            "- The dataset context already tells you the column names, row "
-            "count, and avg chars — do not re-fetch what you already know.",
-
-            "Think step by step — explain your reasoning alongside tool calls.",
-            "When you have enough information, provide a clear, concise response.",
-            "Do NOT retry the same tool with identical arguments if it fails.",
-            "Apply one filter condition at a time when using filter_rows_tool.",
-            "When using markdown, never use h1 (#) or h2 (##). Use h3 (###) max.",
-            "Every tool accepts an optional `dataset` parameter (filename or ID). "
-            "If omitted, it operates on the active dataset.",
-        ],
-        "critical_rules": [
-            "NEVER assume a question is a command. 'How do I filter this?' "
-            "means 'explain how' — NOT 'do it for me'.",
-            "BEFORE any join/merge: you MUST rename all overlapping non-key "
-            "columns so each name clearly identifies its source dataset "
-            "(e.g. 'Volume' -> 'BTC_Volume'). Use rename_column_tool for each.",
-            "BEFORE any positional operation (rolling_window, shift_column, "
-            "or column_formula that references row order): verify the dataset "
-            "is sorted correctly for the calculation. Time-series data MUST be "
-            "sorted ascending (oldest first) by the date/time column. Use "
-            "sample_rows to check row order if unsure, then use "
-            "sort_dataset_tool to sort before proceeding.",
-        ],
-    }
+    MAX_ROUNDS = 4
 
     async def run(self) -> AsyncGenerator[dict, None]:
-        """Simple free-form tool loop. Yields SSE event dicts."""
         self.alog(f"SimpleAgent start: {repr(self.message)[:100]}")
 
         try:
-            sys_prompt: dict = {**self.SYSTEM_PROMPT}
+            sys_prompt: dict = {
+                "role": "You are a data assistant.",
+                "instructions": R_CAPABILITIES,
+            }
             sys_prompt.update(self.ds_context)
 
             messages = [
-                SystemMessage(content=json.dumps(sys_prompt, indent=2)),
-                HumanMessage(content=self.message),
+                {"role": "system", "content": json.dumps(sys_prompt, indent=2)},
+                {"role": "user", "content": self.message},
             ]
 
             for _round in range(self.MAX_ROUNDS):
@@ -95,32 +118,94 @@ class SimpleAgent(BaseAgent):
                     yield {"type": "message", "content": "Cancelled."}
                     return
 
+                self.alog.llm_call_start("simple", _round)
                 self.alog.round_input(_round, messages)
-                self.alog(f"LLM call start (simple round {_round})")
                 t0 = time.monotonic()
-                response = await self.tool_llm.ainvoke(messages)
+                content = await chat_completion(messages)
                 dt = time.monotonic() - t0
-                self.alog(f"LLM call done (simple round {_round}): {dt:.2f}s")
-                self.alog.round_output(_round, response)
-                messages.append(response)
+                self.alog.llm_call_end("simple", dt, _round)
+                self.alog.round_output(_round, content)
 
-                # Emit text
-                if response.content:
-                    yield {"type": "message", "content": response.content}
-                    self.final_response = response.content
-                    self._message_parts.append(response.content)
+                messages.append({"role": "assistant", "content": content})
 
-                # No tool calls → done
-                if not response.tool_calls:
+                # Extract R code blocks
+                r_blocks = _extract_r_blocks(content)
+
+                if not r_blocks:
+                    # Pure text response
+                    yield {"type": "message", "content": content}
+                    self.final_response = content
+                    self._message_parts.append(content)
                     return
 
-                # Execute tool calls
-                async for event in self.execute_tool_calls(response):
-                    yield event
+                # Safety net: if user explicitly asked for explanation only,
+                # treat the whole response as text (don't execute code blocks)
+                if _NO_ACTION_RE.search(self.message):
+                    self.alog("Safety net: user asked for explanation — "
+                              "suppressing R code execution")
+                    yield {"type": "message", "content": content}
+                    self.final_response = content
+                    self._message_parts.append(content)
+                    return
 
-                messages.extend(self._pending_tool_messages)
+                # Strip R code blocks from the text for the message
+                text_only = re.sub(
+                    r"```r\s*\n.*?```", "", content, flags=re.DOTALL
+                ).strip()
+                if text_only:
+                    yield {"type": "message", "content": text_only}
+                    self._message_parts.append(text_only)
 
-            # Safety net: rounds exhausted without final text
+                # Execute each R code block
+                had_error = False
+                for code in r_blocks:
+                    code = code.strip()
+                    if not code:
+                        continue
+
+                    # Send R code to frontend
+                    self.alog.r_code_sent("pending", code, "Executing R code")
+                    execution_id = None
+                    async for event in self.execute_r_code(code, "Executing R code"):
+                        execution_id = event["execution_id"]
+                        self.alog.r_code_sent(execution_id, code, "Executing R code")
+                        yield event
+
+                    if execution_id:
+                        result = await self.await_r_result(execution_id)
+                        self.alog.r_result_received(execution_id, result)
+
+                        summary = ""
+                        if result.get("success"):
+                            stdout = result.get("stdout", "")
+                            summary = stdout[:500] if stdout else "Code executed successfully."
+                        else:
+                            summary = f"Error: {result.get('error', 'Unknown error')}"
+                            had_error = True
+
+                        yield {
+                            "type": "r_code_result",
+                            "execution_id": execution_id,
+                            "success": result.get("success", False),
+                            "summary": summary,
+                        }
+
+                        # If error, add to messages for retry
+                        if not result.get("success"):
+                            messages.append({
+                                "role": "user",
+                                "content": (
+                                    f"The R code failed with error: {summary}\n"
+                                    "Please fix the code and try again."
+                                ),
+                            })
+
+                if had_error:
+                    continue  # retry round
+
+                self.final_response = text_only or content
+                return
+
             if not self.final_response:
                 yield {
                     "type": "message",
