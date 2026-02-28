@@ -112,105 +112,144 @@ class SimpleAgent(BaseAgent):
                 {"role": "user", "content": self.message},
             ]
 
-            for _round in range(self.MAX_ROUNDS):
-                if self.cancel.is_set():
-                    self.alog("Cancelled")
-                    yield {"type": "message", "content": "Cancelled."}
+            _round = 0
+            last_error = ""
+            while True:
+                batch_end = _round + self.MAX_ROUNDS
+
+                while _round < batch_end:
+                    if self.cancel.is_set():
+                        self.alog("Cancelled")
+                        yield {"type": "message", "content": "Cancelled."}
+                        return
+
+                    self.alog.llm_call_start("simple", _round)
+                    self.alog.round_input(_round, messages)
+                    t0 = time.monotonic()
+                    content = await chat_completion(messages)
+                    dt = time.monotonic() - t0
+                    self.alog.llm_call_end("simple", dt, _round)
+                    self.alog.round_output(_round, content)
+
+                    messages.append({"role": "assistant", "content": content})
+
+                    # Extract R code blocks
+                    r_blocks = _extract_r_blocks(content)
+
+                    if not r_blocks:
+                        # Pure text response
+                        yield {"type": "message", "content": content}
+                        self.final_response = content
+                        self._message_parts.append(content)
+                        return
+
+                    # Safety net: if user explicitly asked for explanation only,
+                    # treat the whole response as text (don't execute code blocks)
+                    if _NO_ACTION_RE.search(self.message):
+                        self.alog("Safety net: user asked for explanation — "
+                                  "suppressing R code execution")
+                        yield {"type": "message", "content": content}
+                        self.final_response = content
+                        self._message_parts.append(content)
+                        return
+
+                    # Strip R code blocks from the text for the message
+                    text_only = re.sub(
+                        r"```r\s*\n.*?```", "", content, flags=re.DOTALL
+                    ).strip()
+                    if text_only:
+                        yield {"type": "message", "content": text_only}
+                        self._message_parts.append(text_only)
+
+                    # Execute each R code block
+                    had_error = False
+                    for code in r_blocks:
+                        code = code.strip()
+                        if not code:
+                            continue
+
+                        # Send R code to frontend
+                        self.alog.r_code_sent("pending", code, "Executing R code")
+                        execution_id = None
+                        async for event in self.execute_r_code(code, "Executing R code"):
+                            execution_id = event["execution_id"]
+                            self.alog.r_code_sent(execution_id, code, "Executing R code")
+                            yield event
+
+                        if execution_id:
+                            result = await self.await_r_result(execution_id)
+                            self.alog.r_result_received(execution_id, result)
+
+                            summary = ""
+                            if result.get("success"):
+                                stdout = result.get("stdout", "")
+                                summary = stdout[:500] if stdout else "Code executed successfully."
+                            else:
+                                error_msg = result.get('error', 'Unknown error')
+                                if error_msg.startswith("Error: "):
+                                    error_msg = error_msg[7:]
+                                stderr = result.get('stderr', '')
+                                summary = f"Error: {error_msg}"
+                                if stderr and stderr.strip() != error_msg.strip():
+                                    summary += f"\nStderr: {stderr[:500]}"
+                                last_error = error_msg
+                                had_error = True
+
+                            yield {
+                                "type": "r_code_result",
+                                "execution_id": execution_id,
+                                "success": result.get("success", False),
+                                "summary": summary,
+                            }
+
+                            # If error, add to messages for retry
+                            if not result.get("success"):
+                                messages.append({
+                                    "role": "user",
+                                    "content": (
+                                        f"The R code failed with error: {summary}\n"
+                                        "Please fix the code and try again."
+                                    ),
+                                })
+
+                    _round += 1
+
+                    if had_error:
+                        continue  # retry round
+
+                    self.final_response = text_only or content
                     return
 
-                self.alog.llm_call_start("simple", _round)
-                self.alog.round_input(_round, messages)
-                t0 = time.monotonic()
-                content = await chat_completion(messages)
-                dt = time.monotonic() - t0
-                self.alog.llm_call_end("simple", dt, _round)
-                self.alog.round_output(_round, content)
-
-                messages.append({"role": "assistant", "content": content})
-
-                # Extract R code blocks
-                r_blocks = _extract_r_blocks(content)
-
-                if not r_blocks:
-                    # Pure text response
-                    yield {"type": "message", "content": content}
-                    self.final_response = content
-                    self._message_parts.append(content)
+                if self.final_response:
                     return
 
-                # Safety net: if user explicitly asked for explanation only,
-                # treat the whole response as text (don't execute code blocks)
-                if _NO_ACTION_RE.search(self.message):
-                    self.alog("Safety net: user asked for explanation — "
-                              "suppressing R code execution")
-                    yield {"type": "message", "content": content}
-                    self.final_response = content
-                    self._message_parts.append(content)
+                # Ask user if they want to continue
+                question = (
+                    f"I've tried {_round} times but keep hitting an error"
+                    + (f": {last_error[:200]}" if last_error else "")
+                    + ". Would you like me to keep trying?"
+                )
+                ask_id = None
+                async for event in self.ask_user(question):
+                    ask_id = event["ask_id"]
+                    yield event
+
+                if ask_id:
+                    answer = await self.await_user_answer(ask_id)
+                    no_words = {"no", "stop", "cancel", "quit", "n"}
+                    if answer.strip().lower() in no_words:
+                        self.final_response = (
+                            "\n\n".join(self._message_parts)
+                            if self._message_parts else ""
+                        )
+                        return
+                    # Inject user's answer for context
+                    messages.append({
+                        "role": "user",
+                        "content": f"The user said: {answer}. Please try again.",
+                    })
+                else:
                     return
-
-                # Strip R code blocks from the text for the message
-                text_only = re.sub(
-                    r"```r\s*\n.*?```", "", content, flags=re.DOTALL
-                ).strip()
-                if text_only:
-                    yield {"type": "message", "content": text_only}
-                    self._message_parts.append(text_only)
-
-                # Execute each R code block
-                had_error = False
-                for code in r_blocks:
-                    code = code.strip()
-                    if not code:
-                        continue
-
-                    # Send R code to frontend
-                    self.alog.r_code_sent("pending", code, "Executing R code")
-                    execution_id = None
-                    async for event in self.execute_r_code(code, "Executing R code"):
-                        execution_id = event["execution_id"]
-                        self.alog.r_code_sent(execution_id, code, "Executing R code")
-                        yield event
-
-                    if execution_id:
-                        result = await self.await_r_result(execution_id)
-                        self.alog.r_result_received(execution_id, result)
-
-                        summary = ""
-                        if result.get("success"):
-                            stdout = result.get("stdout", "")
-                            summary = stdout[:500] if stdout else "Code executed successfully."
-                        else:
-                            summary = f"Error: {result.get('error', 'Unknown error')}"
-                            had_error = True
-
-                        yield {
-                            "type": "r_code_result",
-                            "execution_id": execution_id,
-                            "success": result.get("success", False),
-                            "summary": summary,
-                        }
-
-                        # If error, add to messages for retry
-                        if not result.get("success"):
-                            messages.append({
-                                "role": "user",
-                                "content": (
-                                    f"The R code failed with error: {summary}\n"
-                                    "Please fix the code and try again."
-                                ),
-                            })
-
-                if had_error:
-                    continue  # retry round
-
-                self.final_response = text_only or content
-                return
-
-            if not self.final_response:
-                yield {
-                    "type": "message",
-                    "content": "I ran out of steps. Please try a simpler request.",
-                }
 
         finally:
             self.cleanup()

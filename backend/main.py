@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import stripe
+import sentry_sdk
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -19,6 +20,14 @@ from plan_limits import PLANS, SIMPLE_QUERY_COST, COMPLEX_QUERY_COST, STRIPE_PRO
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+
+# Sentry error tracking — no-op if SENTRY_DSN is not set
+if os.getenv("SENTRY_DSN"):
+    sentry_sdk.init(
+        dsn=os.getenv("SENTRY_DSN"),
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -81,6 +90,10 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
             raise HTTPException(status_code=404, detail="User profile not found")
 
         p = profile.data
+
+        # Tag Sentry events with the authenticated user
+        sentry_sdk.set_user({"id": str(user.id), "email": user.email})
+
         return {
             "id": user.id,
             "email": user.email,

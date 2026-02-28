@@ -63,7 +63,9 @@ def _parse_plan_response(raw_text: str) -> tuple[list[PlanStep], bool]:
             considerations=item.get("considerations", ""),
             status=item.get("status", "pending"),
         ))
-    return (steps or [_fallback_step()]), complete
+    if not steps and not complete:
+        steps = [_fallback_step()]
+    return steps, complete
 
 
 def _fallback_step() -> PlanStep:
@@ -279,7 +281,8 @@ class ComplexAgent(BaseAgent):
             plan_steps, plan_complete = _parse_plan_response(plan_text)
             self.alog.plan(_serialize_plan(plan_steps), plan_complete)
 
-            yield {"type": "plan", "steps": _serialize_plan(plan_steps)}
+            if plan_steps:
+                yield {"type": "plan", "steps": _serialize_plan(plan_steps)}
 
             # ---------- LOOP ----------
             action_sys = {
@@ -433,7 +436,12 @@ class ComplexAgent(BaseAgent):
                                 else "Executed successfully."
                             )
                         else:
+                            if error.startswith("Error: "):
+                                error = error[7:]
+                            stderr = result.get("stderr", "")
                             result_summary = f"Error: {error}"
+                            if stderr and stderr.strip() != error.strip():
+                                result_summary += f"\nStderr: {stderr[:500]}"
 
                         yield {
                             "type": "r_code_result",
