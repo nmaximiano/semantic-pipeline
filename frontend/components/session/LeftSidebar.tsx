@@ -29,6 +29,7 @@ interface LeftSidebarProps {
   envReady: boolean;
   // Plot panel
   plots: StoredPlot[];
+  onDeletePlot: (plotId: string) => void;
   onClearPlots: () => void;
   // Code history panel
   sessionId: string;
@@ -83,6 +84,7 @@ export function LeftSidebar({
   onObjectClick,
   envReady,
   plots,
+  onDeletePlot,
   onClearPlots,
   sessionId,
   codeHistoryRefreshKey,
@@ -137,7 +139,7 @@ export function LeftSidebar({
             />
           )}
           {activeTab === "plots" && (
-            <PlotPanel plots={plots} onClear={onClearPlots} />
+            <PlotPanel plots={plots} onDelete={onDeletePlot} onClear={onClearPlots} />
           )}
           {activeTab === "code" && (
             <CodeHistoryPanel

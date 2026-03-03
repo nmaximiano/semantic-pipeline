@@ -1,17 +1,19 @@
-# Kwartz
+# R·Base
 
-AI-powered data analysis platform. Upload a dataset, open a session, and chat with an AI agent that analyzes, transforms, and visualizes your data using R — no code required.
+In-browser R data science IDE with an integrated AI agent.
+
+Write and run R code, generate ggplot2 visualizations, and analyze datasets — all in your browser with zero setup. An AI agent is built in: describe what you want in plain English and it writes, executes, and iterates on R code for you.
 
 ## How it works
 
 1. Sign up / log in (Supabase Auth)
 2. Create a session from the dashboard
 3. Upload CSV datasets into the session
-4. Chat with an AI agent that writes and executes R code on your data
-5. View results in an interactive table, R console, and plot gallery
+4. Write R code in the console, or chat with the AI agent to generate it
+5. View results in an interactive data table, R console output, and plot gallery
 6. Download transformed datasets as CSV
 
-The agent runs R code (dplyr, ggplot2, tidyr, etc.) in-browser via WebR. All data stays client-side in DuckDB-WASM — the backend only handles auth, chat routing, and LLM calls.
+R code runs in-browser via WebR (dplyr, ggplot2, tidyr, stringr, lubridate, and more). All data stays client-side in DuckDB-WASM — the backend only handles auth, chat routing, and LLM calls.
 
 ## Tech stack
 

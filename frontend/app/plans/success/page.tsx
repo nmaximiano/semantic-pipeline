@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/useTheme";
@@ -119,9 +119,8 @@ export default function SubscriptionSuccess() {
         <nav className="shrink-0 border-b border-border bg-surface px-5 py-4">
           <div className="flex items-center justify-between">
             <Link href="/dashboard" className="flex items-center gap-2.5">
-              <Image src="/logo.png" alt="Kwartz" width={32} height={32} />
-              <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-                Kwartz
+              <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+                <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
             <div className="flex items-center gap-3">
@@ -159,14 +158,8 @@ export default function SubscriptionSuccess() {
       <nav className="shrink-0 border-b border-border bg-surface px-5 py-4">
         <div className="flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <Image
-              src="/logo.png"
-              alt="Kwartz"
-              width={32}
-              height={32}
-            />
-            <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-              Kwartz
+            <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+              <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
             </span>
           </Link>
           <div className="flex items-center gap-3">

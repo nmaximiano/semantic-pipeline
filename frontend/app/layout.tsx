@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// ✦ Change this number to adjust the Kwartz logo weight (200–700)
+// ✦ Change this number to adjust the RBase logo weight (200–700)
 const CLASH_WEIGHT = "500";
 
 const clashDisplay = localFont({
@@ -22,10 +22,11 @@ const clashDisplay = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Kwartz - AI for Data",
-  description: "An AI agent that works with your data — analyze, transform, and enrich datasets through conversation.",
+  title: "R·Base — Data Science in Your Browser",
+  description: "In-browser R IDE with an integrated AI agent. Write R code, generate ggplot2 visualizations, and analyze datasets — zero setup required.",
   icons: {
-    icon: "/favicon.png?v=4",
+    icon: "/r-logo-64.png",
+    apple: "/r-logo-180.png",
   },
 };
 

@@ -91,7 +91,7 @@ export async function initDuckDB(userId?: string): Promise<void> {
     // Try OPFS for persistence across page reloads
     // Namespace by userId so each user gets isolated storage
     const opfsPath = userId
-      ? `opfs://kwartz_${userId}.duckdb`
+      ? `opfs://RBase_${userId}.duckdb`
       : null; // no userId → in-memory only
 
     if (opfsPath) {
@@ -533,7 +533,7 @@ export async function clearAllData(): Promise<void> {
   await new Promise((r) => setTimeout(r, 200));
 
   // 4. Delete OPFS entries matching this user's file (not other users' files)
-  const prefix = userIdToClean ? `kwartz_${userIdToClean}` : "kwartz";
+  const prefix = userIdToClean ? `RBase_${userIdToClean}` : "RBase";
   const MAX_RETRIES = 3;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {

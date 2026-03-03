@@ -7,9 +7,10 @@ interface SettingsMenuProps {
   email: string;
   onLogout: () => void;
   onClearData?: () => void;
+  plan?: string;
 }
 
-export default function SettingsMenu({ email, onLogout, onClearData }: SettingsMenuProps) {
+export default function SettingsMenu({ email, onLogout, onClearData, plan }: SettingsMenuProps) {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -61,6 +62,14 @@ export default function SettingsMenu({ email, onLogout, onClearData }: SettingsM
           >
             Subscription
           </Link>
+          {plan === "beta" && (
+            <Link
+              href="/feedback"
+              className="block px-3.5 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
+            >
+              Send Feedback
+            </Link>
+          )}
           {onClearData && (
             <button
               onClick={onClearData}

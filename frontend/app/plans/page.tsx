@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/useTheme";
 import SettingsMenu from "@/components/SettingsMenu";
+import FeedbackWidget from "@/components/FeedbackWidget";
 import type { Session } from "@supabase/supabase-js";
 import { API, getAccessToken } from "@/lib/api";
 import { flushCheckpoint } from "@/lib/duckdb";
@@ -129,9 +130,8 @@ export default function CreditsPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer">
-                <Image src="/logo.png" alt="Kwartz" width={32} height={32} />
-                <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-                  Kwartz
+                <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+                  <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
                 </span>
               </Link>
             </div>
@@ -207,6 +207,8 @@ export default function CreditsPage() {
   }
 
   const isPro = account?.plan === "pro";
+  const isBeta = account?.plan === "beta";
+  const hasProFeatures = isPro || isBeta;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -214,14 +216,8 @@ export default function CreditsPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer">
-              <Image
-                src="/logo.png"
-                alt="Kwartz"
-                width={32}
-                height={32}
-              />
-              <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-                Kwartz
+              <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+                <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
           </div>
@@ -241,13 +237,24 @@ export default function CreditsPage() {
                 </svg>
               )}
             </button>
+            {account?.plan === "beta" && (
+              <Link
+                href="/feedback"
+                className="text-xs font-medium text-[var(--color-beta)] hover:text-[var(--color-beta)]/80 transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                Feedback
+              </Link>
+            )}
             <Link
               href="/dashboard"
               className="bg-accent text-white text-xs font-medium px-4 py-1.5 rounded-lg hover:bg-accent-hover transition-colors"
             >
               Dashboard
             </Link>
-            <SettingsMenu email={session?.user?.email ?? ""} onLogout={handleLogout} />
+            <SettingsMenu email={session?.user?.email ?? ""} onLogout={handleLogout} plan={account?.plan} />
           </div>
         </div>
       </nav>
@@ -269,12 +276,12 @@ export default function CreditsPage() {
             {/* Free card */}
             <div
               className={`rounded-2xl border bg-surface p-9 flex flex-col relative overflow-hidden transition-shadow ${
-                !isPro
+                !hasProFeatures
                   ? "border-accent/50 shadow-md shadow-accent/5"
                   : "border-border"
               }`}
             >
-              {!isPro && (
+              {!hasProFeatures && (
                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-accent/40" />
               )}
 
@@ -283,7 +290,7 @@ export default function CreditsPage() {
                   <span className="text-base font-medium text-text-secondary uppercase tracking-wider">
                     Free
                   </span>
-                  {!isPro && (
+                  {!hasProFeatures && (
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-accent bg-accent/10 rounded-full px-2.5 py-0.5">
                       Current plan
                     </span>
@@ -302,7 +309,7 @@ export default function CreditsPage() {
                 <FeatureRow label="Storage" value="50 MB" />
               </div>
 
-              {isPro ? (
+              {hasProFeatures ? (
                 <div className="mt-8 w-full py-3 rounded-xl text-base font-medium text-center text-text-muted border border-border">
                   Free tier
                 </div>
@@ -318,26 +325,30 @@ export default function CreditsPage() {
 
             {/* Pro card */}
             <div
-              className={`rounded-2xl bg-surface p-9 flex flex-col relative transition-shadow rainbow-glow-card ${
-                isPro
-                  ? "border border-accent/50 shadow-md shadow-accent/5"
-                  : "border-transparent"
+              className={`rounded-2xl bg-surface p-9 flex flex-col relative transition-shadow ${
+                hasProFeatures
+                  ? isBeta
+                    ? "border border-[var(--color-beta-border)] shadow-md shadow-purple-500/5"
+                    : "border border-accent/50 shadow-md shadow-accent/5 rainbow-glow-card"
+                  : "border-transparent rainbow-glow-card"
               }`}
             >
               <div className="mb-7">
                 <div className="flex items-center justify-between">
-                  <span className="text-base font-medium text-accent uppercase tracking-wider">
-                    Pro
+                  <span className={`text-base font-medium uppercase tracking-wider ${isBeta ? "text-[var(--color-beta)]" : "text-accent"}`}>
+                    {isBeta ? "Beta" : "Pro"}
                   </span>
-                  {isPro && (
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-accent bg-accent/10 rounded-full px-2.5 py-0.5">
+                  {hasProFeatures && (
+                    <span className={`text-[11px] font-semibold uppercase tracking-wider rounded-full px-2.5 py-0.5 ${
+                      isBeta ? "text-[var(--color-beta)] bg-[var(--color-beta-bg)]" : "text-accent bg-accent/10"
+                    }`}>
                       Current plan
                     </span>
                   )}
                 </div>
                 <div className="mt-4 flex items-baseline gap-1.5">
-                  <span className="text-5xl font-bold text-text tracking-tight">$9</span>
-                  <span className="text-base text-text-muted">/month</span>
+                  <span className="text-5xl font-bold text-text tracking-tight">{isBeta ? "Free" : "$9"}</span>
+                  {!isBeta && <span className="text-base text-text-muted">/month</span>}
                 </div>
               </div>
 
@@ -352,7 +363,11 @@ export default function CreditsPage() {
                 </div>
               </div>
 
-              {isPro ? (
+              {isBeta ? (
+                <div className="mt-8 w-full py-3 rounded-xl text-base font-medium text-center text-[var(--color-beta)] border border-[var(--color-beta-border)] bg-[var(--color-beta-bg)]">
+                  You&apos;re a beta tester
+                </div>
+              ) : isPro ? (
                 <button
                   onClick={handleManageBilling}
                   disabled={managingBilling}
@@ -363,24 +378,21 @@ export default function CreditsPage() {
                     : "Manage subscription"}
                 </button>
               ) : (
-                <button
-                  onClick={handleUpgrade}
-                  disabled={upgrading}
-                  className="mt-8 w-full bg-accent text-white py-3 rounded-xl text-base font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                >
-                  {upgrading
-                    ? "Redirecting to Stripe..."
-                    : "Upgrade to Pro"}
-                </button>
+                <div className="mt-8 w-full py-3 rounded-xl text-base font-medium text-center text-text-muted border border-border bg-surface-alt">
+                  Coming soon
+                </div>
               )}
             </div>
           </div>
 
-          <p className="text-sm text-text-muted text-center mt-7">
-            Payments processed securely by Stripe &middot; Cancel anytime
-          </p>
+          {isPro && (
+            <p className="text-sm text-text-muted text-center mt-7">
+              Payments processed securely by Stripe &middot; Cancel anytime
+            </p>
+          )}
         </div>
       </main>
+      <FeedbackWidget plan={account?.plan ?? null} />
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { useSessionData } from "@/lib/useSessionData";
 import { useREnvironment } from "@/lib/useREnvironment";
 import { useAgentChat } from "@/lib/useAgentChat";
 import SettingsMenu from "@/components/SettingsMenu";
+import FeedbackWidget from "@/components/FeedbackWidget";
 import * as localDatasets from "@/lib/datasets";
 import * as localSessions from "@/lib/sessions";
 import * as chatMemory from "@/lib/chatMemory";
@@ -141,7 +142,7 @@ export default function SessionWorkspacePage() {
 
   // Left sidebar
   const sidebar = useLeftSidebar();
-  const { plots, addPlots, clearPlots } = usePlotStore(sessionId, duckdbReady);
+  const { plots, addPlots, removePlot, clearPlots } = usePlotStore(sessionId, duckdbReady);
   const [codeHistoryRefreshKey, setCodeHistoryRefreshKey] = useState(0);
 
   // Bottom console panel — resizable height (always visible)
@@ -1135,14 +1136,8 @@ export default function SessionWorkspacePage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer">
-              <Image
-                src="/logo.png"
-                alt="Kwartz"
-                width={32}
-                height={32}
-              />
-              <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-                Kwartz
+              <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+                <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
           </div>
@@ -1162,21 +1157,34 @@ export default function SessionWorkspacePage() {
                 </svg>
               )}
             </button>
+            {plan === "beta" && (
+              <Link
+                href="/feedback"
+                className="text-xs font-medium text-[var(--color-beta)] hover:text-[var(--color-beta)]/80 transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                Feedback
+              </Link>
+            )}
             <Link
               href="/plans"
               className={`text-xs font-medium rounded-full px-2.5 py-1 border inline-flex items-center transition-colors cursor-pointer ${
                 plan === "pro"
                   ? "pro-badge"
-                  : "border-border bg-surface-alt text-text-secondary hover:border-accent/40"
+                  : plan === "beta"
+                    ? "beta-badge"
+                    : "border-border bg-surface-alt text-text-secondary hover:border-accent/40"
               }`}
             >
               {plan !== null ? (
-                plan === "pro" ? "Pro" : "Free"
+                plan === "pro" ? "Pro" : plan === "beta" ? "Beta" : "Free"
               ) : (
                 <span className="inline-block h-3 w-7 rounded animate-shimmer" />
               )}
             </Link>
-            <SettingsMenu email={session?.user?.email ?? ""} onLogout={handleLogout} />
+            <SettingsMenu email={session?.user?.email ?? ""} onLogout={handleLogout} plan={plan ?? undefined} />
           </div>
         </div>
       </nav>
@@ -1428,6 +1436,7 @@ export default function SessionWorkspacePage() {
           onObjectClick={handleObjectTabClick}
           envReady={envReady}
           plots={plots}
+          onDeletePlot={removePlot}
           onClearPlots={clearPlots}
           sessionId={sessionId}
           codeHistoryRefreshKey={codeHistoryRefreshKey}
@@ -1976,6 +1985,7 @@ export default function SessionWorkspacePage() {
       </div>
 
       <RuntimeToast status={runtimeStatus} progress={runtimeProgress} duckdbReady={duckdbReady} />
+      <FeedbackWidget plan={plan} />
     </div>
   );
 }

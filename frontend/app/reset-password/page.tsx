@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
+
 import Link from "next/link";
 import { motion } from "motion/react";
 import { useTheme } from "@/lib/useTheme";
@@ -37,9 +37,8 @@ export default function ResetPasswordPage() {
       <nav className="shrink-0 border-b border-border bg-surface px-5 py-4">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/logo.png" alt="Kwartz" width={32} height={32} />
-            <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-              Kwartz
+            <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+              <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
             </span>
           </Link>
           <button
@@ -61,8 +60,6 @@ export default function ResetPasswordPage() {
       </nav>
 
       <main className="flex-1 flex items-center justify-center bg-surface px-4 relative overflow-hidden">
-        <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-[radial-gradient(ellipse,rgba(99,102,241,0.07)_0%,rgba(167,139,250,0.03)_40%,transparent_70%)] pointer-events-none" />
-
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

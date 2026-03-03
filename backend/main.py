@@ -91,18 +91,31 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
 
         p = profile.data
 
+        # Auto-expire beta users
+        plan = p.get("plan", "free")
+        if plan == "beta" and p.get("beta_expires_at"):
+            expires = datetime.fromisoformat(p["beta_expires_at"])
+            if expires <= datetime.now(timezone.utc):
+                supabase_admin.table("profiles").update({
+                    "plan": "free", "beta_expires_at": None,
+                }).eq("id", user.id).execute()
+                plan = "free"
+                p["beta_expires_at"] = None
+                log.info(f"Beta expired for user {user.id}")
+
         # Tag Sentry events with the authenticated user
         sentry_sdk.set_user({"id": str(user.id), "email": user.email})
 
         return {
             "id": user.id,
             "email": user.email,
-            "plan": p.get("plan", "free"),
+            "plan": plan,
             "credits_used": p.get("credits_used", 0),
             "transform_rows_used": p.get("transform_rows_used", 0),
             "period_start": p.get("period_start"),
             "stripe_customer_id": p.get("stripe_customer_id"),
             "stripe_subscription_id": p.get("stripe_subscription_id"),
+            "beta_expires_at": p.get("beta_expires_at"),
         }
     except HTTPException:
         raise
@@ -118,7 +131,7 @@ async def get_account(user: dict = Depends(get_current_user)):
     """Get current user's plan status and usage."""
     plan = user["plan"]
     limits = PLANS[plan]
-    return {
+    resp = {
         "plan": plan,
         "email": user["email"],
         "credits_used": user["credits_used"],
@@ -130,6 +143,37 @@ async def get_account(user: dict = Depends(get_current_user)):
         "max_storage_bytes": limits["max_storage_bytes"],
         "period_start": user["period_start"],
     }
+    if plan == "beta":
+        resp["beta_expires_at"] = user.get("beta_expires_at")
+    return resp
+
+
+# --- Feedback ---
+
+class FeedbackRequest(BaseModel):
+    category: str = Field(..., pattern="^(bug|feature|general)$")
+    message: str = Field(..., min_length=1, max_length=5000)
+    page_url: str | None = Field(None, max_length=500)
+
+
+@app.post("/feedback")
+@limiter.limit("10/minute")
+async def submit_feedback(request: Request, body: FeedbackRequest, user: dict = Depends(get_current_user)):
+    """Submit feedback. Only available to beta testers."""
+    if user["plan"] != "beta":
+        raise HTTPException(status_code=403, detail="Feedback is only available to beta testers")
+
+    try:
+        supabase_admin.table("feedback").insert({
+            "user_id": str(user["id"]),
+            "category": body.category,
+            "message": body.message,
+            "page_url": body.page_url,
+        }).execute()
+        return {"status": "received"}
+    except Exception as e:
+        log.error(f"Feedback insert error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit feedback")
 
 
 # --- Stripe ---
@@ -138,6 +182,7 @@ async def get_account(user: dict = Depends(get_current_user)):
 @limiter.limit("5/minute")
 async def create_checkout_session(request: Request, user: dict = Depends(get_current_user)):
     """Create a Stripe Checkout session for Pro subscription."""
+    raise HTTPException(status_code=403, detail="Pro subscriptions are temporarily unavailable")
     if user["plan"] == "pro":
         raise HTTPException(status_code=400, detail="Already on Pro plan")
 

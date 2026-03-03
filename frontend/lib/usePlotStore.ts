@@ -11,7 +11,7 @@ export interface StoredPlot {
   code?: string;
 }
 
-let plotIdCounter = 0;
+let plotIdCounter = Date.now();
 
 function imageBitmapToDataUrl(img: ImageBitmap): string {
   const canvas = document.createElement("canvas");
@@ -71,6 +71,16 @@ export function usePlotStore(sessionId: string, duckdbReady: boolean) {
     [sessionId]
   );
 
+  const removePlot = useCallback(
+    (plotId: string) => {
+      setPlots((prev) => prev.filter((p) => p.id !== plotId));
+      plotStorage.deletePlot(sessionId, plotId).catch((e) =>
+        console.error("[plots] Failed to delete plot:", e)
+      );
+    },
+    [sessionId]
+  );
+
   const clearPlots = useCallback(() => {
     setPlots([]);
     plotStorage.clearPlots(sessionId).catch((e) =>
@@ -78,5 +88,5 @@ export function usePlotStore(sessionId: string, duckdbReady: boolean) {
     );
   }, [sessionId]);
 
-  return { plots, addPlots, clearPlots };
+  return { plots, addPlots, removePlot, clearPlots };
 }

@@ -29,6 +29,10 @@
   --color-pro-bg: rgba(217, 119, 6, 0.08);
   --color-pro-border: rgba(217, 119, 6, 0.25);
   --color-pro-border-hover: rgba(217, 119, 6, 0.45);
+  --color-beta: #8b5cf6;
+  --color-beta-bg: rgba(139, 92, 246, 0.08);
+  --color-beta-border: rgba(139, 92, 246, 0.25);
+  --color-beta-border-hover: rgba(139, 92, 246, 0.45);
 }
 
 /* ── Dark mode overrides ── */
@@ -58,6 +62,10 @@ html.dark {
   --color-pro-bg: rgba(245, 158, 11, 0.10);
   --color-pro-border: rgba(245, 158, 11, 0.25);
   --color-pro-border-hover: rgba(245, 158, 11, 0.45);
+  --color-beta: #a78bfa;
+  --color-beta-bg: rgba(167, 139, 250, 0.10);
+  --color-beta-border: rgba(167, 139, 250, 0.25);
+  --color-beta-border-hover: rgba(167, 139, 250, 0.45);
   color-scheme: dark;
 }
 
@@ -115,6 +123,16 @@ input[type="button"], input[type="reset"], input[type="file"] {
 }
 .pro-badge:hover {
   border-color: var(--color-pro-border-hover);
+}
+
+/* Beta badge */
+.beta-badge {
+  color: var(--color-beta);
+  background: var(--color-beta-bg);
+  border-color: var(--color-beta-border);
+}
+.beta-badge:hover {
+  border-color: var(--color-beta-border-hover);
 }
 
 /* Scrollbar styling */

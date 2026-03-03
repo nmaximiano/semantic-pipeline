@@ -106,20 +106,20 @@ export const PlotMessageItem = memo(function PlotMessageItem({ msg }: { msg: Cha
 });
 
 export const QuotaMessageItem = memo(function QuotaMessageItem({ msg }: { msg: ChatMessage }) {
-  const isPro = msg.userPlan === "pro";
+  const hasProFeatures = msg.userPlan === "pro" || msg.userPlan === "beta";
   return (
     <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-2.5">
       <p className="text-[15px] font-semibold text-red-400">{msg.text}</p>
       <p className="text-[13px] text-text-secondary">
-        {isPro
-          ? "Your weekly Pro credits have been used up. They reset every 7 days."
+        {hasProFeatures
+          ? "Your weekly credits have been used up. They reset every 7 days."
           : "Upgrade to Pro for 10x more weekly credits, LLM-powered transforms, and larger datasets."}
       </p>
       <Link
         href="/plans"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg px-4 py-2 transition-colors"
       >
-        {isPro ? "View plan details" : "Upgrade to Pro"}
+        {hasProFeatures ? "View plan details" : "Upgrade to Pro"}
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
           <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
         </svg>

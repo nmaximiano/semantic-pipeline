@@ -37,6 +37,11 @@ export async function savePlots(
   }
 }
 
+/** Delete a single plot for a session. */
+export async function deletePlot(sessionId: string, plotId: string): Promise<void> {
+  await queryDuckDB(`DELETE FROM _plot_store WHERE session_id = '${sessionId}' AND plot_id = '${plotId}'`);
+}
+
 /** Clear all plots for a session. */
 export async function clearPlots(sessionId: string): Promise<void> {
   await queryDuckDB(`DELETE FROM _plot_store WHERE session_id = '${sessionId}'`);
