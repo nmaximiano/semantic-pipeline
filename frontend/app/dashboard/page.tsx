@@ -400,6 +400,11 @@ function DashboardContent() {
                 <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
+            {plan === "beta" && (
+              <span className="text-[10px] font-[family-name:var(--font-geist-mono)] font-light tracking-widest text-accent border border-accent/40 rounded px-1.5 py-0.5 leading-none">
+                BETA
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -480,7 +485,7 @@ function DashboardContent() {
               style={{ fontWeight: "var(--clash-weight)" } as React.CSSProperties}
             >
               Welcome back{plan === "beta" && (
-                <span className="ml-2 text-2xl sm:text-3xl font-bold font-[family-name:var(--font-geist-mono)] text-accent">(BETA)</span>
+                <span className="ml-2 text-2xl sm:text-3xl font-light font-[family-name:var(--font-geist-mono)] text-accent">(BETA)</span>
               )}
             </h1>
             <p className="relative mt-1 text-sm text-text-muted">
