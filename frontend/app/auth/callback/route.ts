@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = searchParams.get("next") ?? "/waitlist";
 
   // Supabase redirects here with error params if OAuth itself fails
   const oauthError = searchParams.get("error_description") || searchParams.get("error");
