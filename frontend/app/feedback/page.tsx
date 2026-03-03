@@ -134,11 +134,16 @@ export default function FeedbackPage() {
     <div className="h-screen flex flex-col overflow-hidden">
       <nav className="shrink-0 border-b border-border bg-surface px-5 py-4">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer">
-            <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
-              <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer">
+              <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+                <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
+              </span>
+            </Link>
+            <span className="text-[10px] font-[family-name:var(--font-geist-mono)] font-medium tracking-widest text-accent border border-accent/40 rounded px-1.5 py-0.5 leading-none">
+              BETA
             </span>
-          </Link>
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={toggleTheme}

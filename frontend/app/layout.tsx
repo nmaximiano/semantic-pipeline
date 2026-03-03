@@ -22,7 +22,7 @@ const clashDisplay = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "R·Base — Data Science in Your Browser",
+  title: "R·Base - Agentic Data Science IDE",
   description: "In-browser R IDE with an integrated AI agent. Write R code, generate ggplot2 visualizations, and analyze datasets — zero setup required.",
   icons: {
     icon: "/r-logo-64.png",
