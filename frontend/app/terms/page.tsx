@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/useTheme";
@@ -43,9 +43,8 @@ export default function TermsPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-surface/90 backdrop-blur-md px-5 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/logo.png" alt="Kwartz" width={32} height={32} />
-            <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-              Kwartz
+            <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+              <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
             </span>
           </Link>
           <div className="flex items-center gap-3">
@@ -91,15 +90,15 @@ export default function TermsPage() {
         <div className="prose prose-neutral dark:prose-invert prose-headings:text-text prose-p:text-text-secondary prose-li:text-text-secondary prose-strong:text-text prose-a:text-accent max-w-none">
           <h2>1. Acceptance of Terms</h2>
           <p>
-            By accessing or using Kwartz (&quot;the Service&quot;), operated by
-            Kwartz (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), you agree
+            By accessing or using R·Base (&quot;the Service&quot;), operated by
+            R·Base (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), you agree
             to be bound by these Terms of Service. If you do not agree, do not
             use the Service.
           </p>
 
           <h2>2. Description of Service</h2>
           <p>
-            Kwartz is an AI-powered data analysis platform. You upload datasets,
+            R·Base is an AI-powered data analysis platform. You upload datasets,
             open sessions, and interact with an AI agent that analyzes,
             transforms, and enriches your data through natural-language
             conversation.
@@ -115,7 +114,7 @@ export default function TermsPage() {
 
           <h2>4. Subscriptions &amp; Billing</h2>
           <p>
-            Kwartz offers a free tier and a paid Pro subscription. Pro
+            R·Base offers a free tier and a paid Pro subscription. Pro
             subscriptions are billed monthly through Stripe and auto-renew until
             cancelled. You can cancel or manage your subscription at any time
             through the Stripe customer portal accessible from your account
@@ -129,7 +128,7 @@ export default function TermsPage() {
 
           <h2>5. User Data &amp; Intellectual Property</h2>
           <p>
-            You retain full ownership of any data you upload to Kwartz. We do
+            You retain full ownership of any data you upload to R·Base. We do
             not claim any intellectual property rights over your datasets or the
             outputs generated from them.
           </p>
@@ -177,7 +176,7 @@ export default function TermsPage() {
 
           <h2>8. Limitation of Liability</h2>
           <p>
-            To the maximum extent permitted by law, Kwartz shall not be liable
+            To the maximum extent permitted by law, R·Base shall not be liable
             for any indirect, incidental, special, consequential, or punitive
             damages, or any loss of profits or data, arising from your use of
             the Service. Our total liability for any claim arising from the
@@ -204,7 +203,7 @@ export default function TermsPage() {
           <h2>11. Contact</h2>
           <p>
             If you have questions about these Terms, please contact us at{" "}
-            <a href="mailto:support@kwartz.ai">support@kwartz.ai</a>.
+            <a href="mailto:support@tryrbase.com">support@tryrbase.com</a>.
           </p>
         </div>
       </main>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/useTheme";
@@ -43,9 +43,8 @@ export default function PrivacyPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-surface/90 backdrop-blur-md px-5 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/logo.png" alt="Kwartz" width={32} height={32} />
-            <span className="text-2xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight text-text">
-              Kwartz
+            <span className="text-3xl font-[family-name:var(--font-clash)] font-[number:var(--clash-weight)] tracking-tight">
+              <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
             </span>
           </Link>
           <div className="flex items-center gap-3">
@@ -128,7 +127,7 @@ export default function PrivacyPage() {
           </ul>
 
           <h2>3. Third-Party Services</h2>
-          <p>We use the following third-party services to operate Kwartz:</p>
+          <p>We use the following third-party services to operate R·Base:</p>
           <ul>
             <li>
               <strong>Supabase</strong> — Authentication and database hosting.
@@ -165,7 +164,7 @@ export default function PrivacyPage() {
 
           <h2>5. Cookies</h2>
           <p>
-            Kwartz uses cookies solely for authentication purposes (Supabase
+            R·Base uses cookies solely for authentication purposes (Supabase
             Auth session cookies). We do not use tracking cookies, advertising
             cookies, or third-party analytics cookies.
           </p>
@@ -176,12 +175,12 @@ export default function PrivacyPage() {
             delete individual datasets at any time from within the Service. If
             you wish to delete your entire account and all associated data,
             please contact us at{" "}
-            <a href="mailto:support@kwartz.ai">support@kwartz.ai</a>.
+            <a href="mailto:support@tryrbase.com">support@tryrbase.com</a>.
           </p>
 
           <h2>7. Children&rsquo;s Privacy</h2>
           <p>
-            Kwartz is not directed at children under the age of 13. We do not
+            R·Base is not directed at children under the age of 13. We do not
             knowingly collect personal information from children under 13. If we
             learn that we have collected data from a child under 13, we will
             delete it promptly.
@@ -198,7 +197,7 @@ export default function PrivacyPage() {
           <h2>9. Contact</h2>
           <p>
             If you have questions about this Privacy Policy, please contact us
-            at <a href="mailto:support@kwartz.ai">support@kwartz.ai</a>.
+            at <a href="mailto:support@tryrbase.com">support@tryrbase.com</a>.
           </p>
         </div>
       </main>
