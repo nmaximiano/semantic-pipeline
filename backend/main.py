@@ -57,6 +57,11 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 _origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 if FRONTEND_URL not in _origins:
     _origins.append(FRONTEND_URL)
+# Also allow www variant
+if FRONTEND_URL.startswith("https://") and not FRONTEND_URL.startswith("https://www."):
+    _origins.append(FRONTEND_URL.replace("https://", "https://www.", 1))
+elif FRONTEND_URL.startswith("https://www."):
+    _origins.append(FRONTEND_URL.replace("https://www.", "https://", 1))
 
 app.add_middleware(
     CORSMiddleware,
