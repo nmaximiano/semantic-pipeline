@@ -23,14 +23,19 @@ export default function LandingPage() {
       setIsLoggedIn(!!session);
       if (session) {
         setUserEmail(session.user?.email ?? "");
-        fetch(`${API}/account`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => {
-            if (data) setPlan(data.plan);
+        const fetchAccount = (token: string, retries = 2) =>
+          fetch(`${API}/account`, {
+            headers: { Authorization: `Bearer ${token}` },
           })
-          .catch(() => {});
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (data) setPlan(data.plan);
+              else if (retries > 0) setTimeout(() => fetchAccount(token, retries - 1), 1500);
+            })
+            .catch(() => {
+              if (retries > 0) setTimeout(() => fetchAccount(token, retries - 1), 1500);
+            });
+        fetchAccount(session.access_token);
       }
     });
   }, []);

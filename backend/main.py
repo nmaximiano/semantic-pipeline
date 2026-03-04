@@ -14,8 +14,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from services import supabase_admin
-from plan_limits import PLANS, SIMPLE_QUERY_COST, COMPLEX_QUERY_COST, STRIPE_PRO_PRICE_ID
+from plan_limits import PLANS, INITIAL_CHAT_COST, TOOL_CALL_COST, STRIPE_PRO_PRICE_ID
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -43,10 +42,11 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
-# Supabase anon client (auth only)
+# Supabase clients
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
 supabase: Client = create_client(supabase_url, supabase_anon_key)
+supabase_admin: Client = create_client(supabase_url, os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 
 # Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -328,7 +328,7 @@ class ChatRequest(BaseModel):
 @limiter.limit("30/minute")
 async def chat_endpoint(request: Request, body: ChatRequest, user: dict = Depends(get_current_user)):
     async def event_stream():
-        from agent.agent import ComplexAgent, SimpleAgent, classify
+        from agent.agent import Agent
         from agent.logger import log as alog
 
         # Prevent concurrent agents per user
@@ -339,63 +339,42 @@ async def chat_endpoint(request: Request, body: ChatRequest, user: dict = Depend
 
         alog(f"Chat request: message={body.message[:80]!r}")
 
-        # Pre-check credits
+        # Deduct initial chat cost (covers the LLM call)
         pre = supabase_admin.rpc("use_message_credits", {
             "p_user_id": str(user["id"]),
-            "p_cost": SIMPLE_QUERY_COST,
+            "p_cost": INITIAL_CHAT_COST,
         }).execute()
-        alog("Credit pre-check done")
         if not pre.data["allowed"]:
             yield f"data: {json.dumps({'type': 'error', 'code': 'quota_exceeded', 'plan': user['plan'], 'credits_used': pre.data.get('credits_used', 0), 'credits_limit': pre.data.get('credits_limit', 0)})}\n\n"
             yield "data: [DONE]\n\n"
             return
 
-        agent_type = await classify(
-            body.message, body.dataset_context, body.history,
-        )
-        alog(f"Routed to: {agent_type}")
-        yield f"data: {json.dumps({'type': 'route', 'agent': agent_type})}\n\n"
-
-        # Deduct remaining credits for complex queries
-        remaining_cost = (COMPLEX_QUERY_COST - SIMPLE_QUERY_COST) if agent_type == "complex" else 0
-        if remaining_cost > 0:
-            result = supabase_admin.rpc("use_message_credits", {
-                "p_user_id": str(user["id"]),
-                "p_cost": remaining_cost,
-            }).execute()
-            if not result.data["allowed"]:
-                yield f"data: {json.dumps({'type': 'error', 'code': 'quota_exceeded', 'plan': user['plan'], 'credits_used': result.data.get('credits_used', 0), 'credits_limit': result.data.get('credits_limit', 0)})}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-
-        # Budget callback: re-charges COMPLEX_QUERY_COST every N rounds
-        def check_budget() -> bool:
+        # Per-tool-call budget: deducts TOOL_CALL_COST before each execute_r
+        def check_tool_budget() -> bool:
             try:
                 r = supabase_admin.rpc("use_message_credits", {
                     "p_user_id": str(user["id"]),
-                    "p_cost": COMPLEX_QUERY_COST,
+                    "p_cost": TOOL_CALL_COST,
                 }).execute()
                 allowed = r.data["allowed"]
-                alog(f"Budget re-check: allowed={allowed}")
+                alog(f"Tool budget check: allowed={allowed}")
                 return allowed
             except Exception as e:
-                alog(f"Budget re-check failed: {e}")
-                return True  # fail open — don't kill the task on transient DB errors
+                alog(f"Tool budget check failed: {e}")
+                return True  # fail open
 
-        AgentClass = ComplexAgent if agent_type == "complex" else SimpleAgent
-        agent = AgentClass(
+        agent = Agent(
             body.message, body.dataset_context,
             user["id"], body.session_id, body.history,
             other_dataframes=body.other_dataframes,
-            check_budget=check_budget if agent_type == "complex" else None,
+            check_tool_budget=check_tool_budget,
             user_plan=user["plan"],
         )
         _active_agents[user["id"]] = agent
 
-        # Log full conversation context to trace file
         agent.alog.session_start(
             user_message=body.message,
-            agent_type=agent_type,
+            agent_type="unified",
             session_id=body.session_id,
             dataset_context=body.dataset_context,
             other_dataframes=body.other_dataframes,
@@ -404,7 +383,8 @@ async def chat_endpoint(request: Request, body: ChatRequest, user: dict = Depend
 
         try:
             async for event in agent.run():
-                agent.alog.sse_event(event)
+                if event.get("type") != "message_delta":
+                    agent.alog.sse_event(event)
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             agent.alog.error("agent_exception", f"{type(e).__name__}: {e}")
@@ -440,12 +420,20 @@ async def chat_answer(body: ChatAnswerRequest, user: dict = Depends(get_current_
     return {"received": True}
 
 
+class DataframeSchema(BaseModel):
+    name: str
+    columns: list[str]
+    row_count: int = 0
+
+
 class ChatResultRequest(BaseModel):
     execution_id: str
     success: bool
     stdout: str | None = None
     stderr: str | None = None
     error: str | None = None
+    active_dataset: DataframeSchema | None = None
+    other_datasets: list[DataframeSchema] | None = None
 
 
 @app.post("/chat/result")
@@ -454,10 +442,21 @@ async def chat_result(body: ChatResultRequest, user: dict = Depends(get_current_
     agent = _active_agents.get(user["id"])
     if not agent:
         raise HTTPException(status_code=404, detail="No active agent")
+
+    # Pass updated schema if provided
+    updated_context = None
+    if body.active_dataset or body.other_datasets:
+        updated_context = {}
+        if body.active_dataset:
+            updated_context["active_dataset"] = body.active_dataset.model_dump()
+        if body.other_datasets:
+            updated_context["other_datasets"] = [d.model_dump() for d in body.other_datasets]
+
     agent.submit_result(body.execution_id, {
         "success": body.success,
         "stdout": body.stdout or "",
         "stderr": body.stderr or "",
         "error": body.error or "",
+        "updated_context": updated_context,
     })
     return {"received": True}

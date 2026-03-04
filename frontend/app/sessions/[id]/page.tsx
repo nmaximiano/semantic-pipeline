@@ -563,6 +563,7 @@ export default function SessionWorkspacePage() {
     const assistantParts: string[] = [];
     const rCodeParts: string[] = [];
     const plotDataUrls: string[] = [];
+    let streamingMsgId: string | null = null;
 
     try {
       // Build dataset context from R environment — include ALL data.frames
@@ -657,9 +658,6 @@ export default function SessionWorkspacePage() {
           }
 
           switch (event.type) {
-            case "route":
-              break;
-
             case "r_code": {
               // Agent wants us to execute R code
               const { execution_id, code, description } = event;
@@ -773,9 +771,11 @@ export default function SessionWorkspacePage() {
               });
 
               // Registry reconciliation after R code execution
+              let updatedActiveDataset: { name: string; columns: string[]; row_count: number } | undefined;
+              let updatedOtherDatasets: Array<{ name: string; columns: string[]; row_count: number }> = [];
               {
                 try {
-                  const { listREnvironment: listEnv } = await import("@/lib/webr");
+                  const { listREnvironment: listEnv, evalR: evalRLocal } = await import("@/lib/webr");
 
                   // Reset sort/page — columns may have changed
                   setSortCol(null);
@@ -789,6 +789,23 @@ export default function SessionWorkspacePage() {
                   const newRegistry = buildRegistry(postObjs, sessionDatasetsRef.current, preExecRegistry);
                   setRegistry(newRegistry);
                   preExecRegistry = newRegistry;
+
+                  // Collect updated schema for backend context refresh
+                  for (const entry of newRegistry.values()) {
+                    if (!entry.isDataFrame) continue;
+                    try {
+                      const cr = await evalRLocal(`cat(paste(colnames(${entry.rName}), collapse="\\t"))`);
+                      const cols = (cr.stdout || "").split("\t").filter(Boolean);
+                      const info = { name: entry.rName, columns: cols, row_count: entry.nrow ?? 0 };
+                      if (entry.stableId === activeStableId) {
+                        updatedActiveDataset = info;
+                      } else {
+                        updatedOtherDatasets.push(info);
+                      }
+                    } catch {
+                      // skip — schema refresh is best-effort
+                    }
+                  }
 
                   // Detect renames and persist them
                   await persistRenames(sessionId, newRegistry, preExecRegistry, setSessionDatasets);
@@ -853,6 +870,8 @@ export default function SessionWorkspacePage() {
                     stdout: execResult.stdout,
                     stderr: execResult.stderr,
                     error: execResult.error,
+                    ...(updatedActiveDataset && { active_dataset: updatedActiveDataset }),
+                    ...(updatedOtherDatasets.length > 0 && { other_datasets: updatedOtherDatasets }),
                   }),
                 });
               } catch (e) {
@@ -864,6 +883,60 @@ export default function SessionWorkspacePage() {
             case "r_code_result":
               // Backend acknowledgement of R result (already handled above)
               break;
+
+            case "message_delta": {
+              const delta = event.content || "";
+              if (!streamingMsgId) {
+                streamingMsgId = nextMsgId();
+                const sid = streamingMsgId;
+                queueMessage((prev) => [
+                  ...prev,
+                  {
+                    id: sid,
+                    role: "assistant",
+                    text: delta,
+                    time: new Date(),
+                    isStreaming: true,
+                  },
+                ]);
+              } else {
+                const sid = streamingMsgId;
+                queueMessage((prev) =>
+                  prev.map((m) =>
+                    m.id === sid ? { ...m, text: m.text + delta } : m
+                  )
+                );
+              }
+              break;
+            }
+
+            case "message_done": {
+              const finalText = event.content || "";
+              if (streamingMsgId) {
+                const sid = streamingMsgId;
+                queueMessage((prev) =>
+                  prev.map((m) =>
+                    m.id === sid
+                      ? { ...m, text: finalText, isStreaming: false }
+                      : m
+                  )
+                );
+                streamingMsgId = null;
+              } else {
+                // No deltas preceded — create message directly
+                queueMessage((prev) => [
+                  ...prev,
+                  {
+                    id: nextMsgId(),
+                    role: "assistant",
+                    text: finalText,
+                    time: new Date(),
+                  },
+                ]);
+              }
+              assistantParts.push(finalText);
+              break;
+            }
 
             case "message":
               assistantParts.push(event.content);
@@ -878,26 +951,25 @@ export default function SessionWorkspacePage() {
               ]);
               break;
 
-            case "plan":
-              queueMessage((prev) => [
-                ...prev,
-                {
-                  id: nextMsgId(),
-                  role: "plan",
-                  text: "",
-                  time: new Date(),
-                  planSteps: event.steps,
-                },
-              ]);
-              break;
-
-            case "plan_update": {
+            case "plan": {
               queueMessage((prev) => {
                 const existing = prev.find((m) => m.role === "plan");
-                const without = prev.filter((m) => m.role !== "plan");
+                if (existing) {
+                  // Update existing plan message in-place
+                  return prev.map((m) =>
+                    m === existing ? { ...m, planSteps: event.steps } : m
+                  );
+                }
+                // Create new plan message
                 return [
-                  ...without,
-                  { ...existing!, planSteps: event.steps },
+                  ...prev,
+                  {
+                    id: nextMsgId(),
+                    role: "plan" as const,
+                    text: "",
+                    time: new Date(),
+                    planSteps: event.steps,
+                  },
                 ];
               });
               break;
@@ -946,6 +1018,17 @@ export default function SessionWorkspacePage() {
               break;
           }
         }
+      }
+
+      // Finalize any orphaned streaming message (e.g. stream interrupted)
+      if (streamingMsgId) {
+        const sid = streamingMsgId;
+        queueMessage((prev) =>
+          prev.map((m) =>
+            m.id === sid ? { ...m, isStreaming: false } : m
+          )
+        );
+        streamingMsgId = null;
       }
 
       // Save turn to local chat memory
@@ -1274,7 +1357,7 @@ export default function SessionWorkspacePage() {
                   </div>
                 ) : (
                   <p className="text-[11px] text-text-muted">
-                    Drop a file here (CSV, Parquet, Stata, RData), or{" "}
+                    Drop a file here, or{" "}
                     <button
                       onClick={() => modalFileRef.current?.click()}
                       className="text-accent hover:text-accent-hover font-medium underline underline-offset-2"
@@ -1483,13 +1566,13 @@ export default function SessionWorkspacePage() {
             <button
               onClick={handleOpenAddDataset}
               className="flex items-center gap-1 px-3 py-3 text-sm text-text-muted hover:text-accent transition-colors cursor-pointer"
-              title="Upload CSV"
+              title="Upload data"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
             </button>
-            {/* Download active dataset as CSV */}
+            {/* Download active dataset */}
             {activeEnvObj?.isDataFrame && (
               <button
                 onClick={async () => {
@@ -1522,7 +1605,7 @@ export default function SessionWorkspacePage() {
                     setError(e.message || "Download failed");
                   }
                 }}
-                title="Download CSV"
+                title="Download as CSV"
                 className="ml-auto flex items-center gap-1 px-3 py-3 text-sm text-text-muted hover:text-accent transition-colors cursor-pointer"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -1547,7 +1630,7 @@ export default function SessionWorkspacePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" />
                 </svg>
                 <p className="text-sm font-medium text-text mb-1">No R objects</p>
-                <p className="text-xs text-text-muted mb-4">Upload a CSV or create objects in the R console.</p>
+                <p className="text-xs text-text-muted mb-4">Upload a dataset or create objects in the R console.</p>
                 <button
                   onClick={handleOpenAddDataset}
                   className="inline-flex items-center gap-2 bg-text text-surface py-2 px-4 rounded-lg text-xs font-medium hover:bg-text/85 transition-colors"
@@ -1555,7 +1638,7 @@ export default function SessionWorkspacePage() {
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
-                  Upload CSV
+                  Upload data
                 </button>
               </div>
             </div>

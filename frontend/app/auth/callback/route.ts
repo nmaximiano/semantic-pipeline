@@ -37,5 +37,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
 
+  // Wait for the profiles row to exist (DB trigger may lag behind auth)
+  for (let i = 0; i < 10; i++) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+    if (data) break;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
   return response;
 }

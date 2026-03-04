@@ -71,6 +71,9 @@ export const AssistantMessageItem = memo(function AssistantMessageItem({ msg }: 
   return (
     <div className="pr-8 prose prose-sm max-w-none text-text prose-headings:text-text prose-strong:text-text prose-p:text-text prose-li:text-text prose-th:text-text-secondary prose-td:text-text prose-code:text-accent prose-a:text-accent prose-pre:bg-surface-alt prose-pre:border prose-pre:border-border prose-thead:border-border prose-tr:border-border">
       <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{prepareMath(msg.text)}</ReactMarkdown>
+      {msg.isStreaming && (
+        <span className="inline-block w-2 h-4 bg-accent/70 rounded-sm animate-pulse ml-0.5 align-text-bottom" />
+      )}
     </div>
   );
 });

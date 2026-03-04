@@ -748,7 +748,7 @@ function DashboardContent() {
                   Drop files here, or{" "}
                   <span className="text-accent font-medium">browse</span>
                 </p>
-                <p className="text-xs text-text-muted/50 mt-0.5">CSV, TSV, or Parquet</p>
+                <p className="text-xs text-text-muted/50 mt-0.5">CSV, TSV, Parquet</p>
               </div>
               <input
                 ref={modalFileRef}

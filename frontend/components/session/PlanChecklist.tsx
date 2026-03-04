@@ -43,14 +43,10 @@ export function PlanChecklist({ steps }: { steps: PlanStepData[] }) {
                 <svg className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                 </svg>
-              ) : step.status === "skipped" ? (
-                <svg className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 8.689c0-.864.933-1.405 1.683-.977l7.108 4.062a1.125 1.125 0 010 1.953l-7.108 4.062A1.125 1.125 0 013 16.81V8.69zM12.75 8.689c0-.864.933-1.405 1.683-.977l7.108 4.062a1.125 1.125 0 010 1.953l-7.108 4.062a1.125 1.125 0 01-1.683-.977V8.69z" />
-                </svg>
               ) : (
                 <div className="w-3.5 h-3.5 shrink-0 mt-0.5 rounded-full border border-border" />
               )}
-              <span className={step.status === "skipped" ? "line-through text-text-muted" : "text-text"}>
+              <span className="text-text">
                 {step.description}
               </span>
             </div>

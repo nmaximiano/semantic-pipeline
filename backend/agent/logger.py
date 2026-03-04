@@ -221,13 +221,9 @@ class AgentLogger:
             "step_count": len(steps),
         })
 
-    def replan(self, step_id: int, tool_name: str, steps: list, complete: bool):
-        self._trace("replan", {
-            "after_step": step_id,
-            "action": tool_name,
-            "complete": complete,
-            "steps": steps,
-        })
+    def tool_call(self, tool_name: str, tool_args: dict):
+        self._trace("tool_call", {"tool": tool_name, "args": tool_args})
+        _summary_entry("tool_call", {"tool": tool_name})
 
     # -- Errors ------------------------------------------------------------
 

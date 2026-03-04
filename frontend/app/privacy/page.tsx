@@ -100,7 +100,7 @@ export default function PrivacyPage() {
             enforce plan limits and improve the Service.
           </p>
           <p>
-            <strong>Datasets:</strong> You upload CSV datasets to the Service.
+            <strong>Datasets:</strong> You upload datasets to the Service.
             Dataset contents are stored in our database to provide the Service to
             you.
           </p>

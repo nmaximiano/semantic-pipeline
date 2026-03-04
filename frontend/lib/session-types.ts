@@ -3,7 +3,7 @@ export type { ObjectRegistryEntry, DatasetMeta } from "@/lib/registry";
 export interface PlanStepData {
   id: number;
   description: string;
-  status: "pending" | "done" | "skipped";
+  status: "pending" | "done";
 }
 
 export interface ChatMessage {
@@ -21,6 +21,7 @@ export interface ChatMessage {
   askQuestion?: string;
   answered?: boolean;
   userPlan?: string;
+  isStreaming?: boolean;
 }
 
 export interface RowsResponse {
