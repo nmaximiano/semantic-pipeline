@@ -133,9 +133,9 @@ const MODEL_OPTIONS: { id: string; label: string; credits: number; tier: string;
   { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash", credits: 14, tier: "pro", recommended: true },
   { id: "openai/gpt-5.1-codex-mini", label: "GPT-5.1 Codex Mini", credits: 8, tier: "pro" },
   { id: "minimax/minimax-m2.5", label: "MiniMax M2.5", credits: 8, tier: "pro" },
+  { id: "google/gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite", credits: 7, tier: "free" },
   { id: "inception/mercury-2", label: "Mercury 2", credits: 6, tier: "pro" },
   { id: "kwaipilot/kat-coder-pro", label: "KAT-Coder Pro", credits: 6, tier: "pro" },
-  { id: "google/gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite", credits: 7, tier: "free" },
   { id: "deepseek/deepseek-v3.2", label: "DeepSeek V3.2", credits: 4, tier: "free" },
 ];
 
