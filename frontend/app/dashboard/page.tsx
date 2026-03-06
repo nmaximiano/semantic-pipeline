@@ -168,6 +168,7 @@ function DashboardContent() {
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [newSessionName, setNewSessionName] = useState("");
   const [creatingSession, setCreatingSession] = useState(false);
+  const [createSessionError, setCreateSessionError] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<{ file: File; name: string }[]>([]);
   const [modalDragging, setModalDragging] = useState(false);
   const modalDragCounter = useRef(0);
@@ -277,6 +278,7 @@ function DashboardContent() {
     setModalDragging(false);
     modalDragCounter.current = 0;
     if (modalFileRef.current) modalFileRef.current.value = "";
+    setCreateSessionError(null);
     setShowNewSessionModal(true);
   }
 
@@ -327,10 +329,17 @@ function DashboardContent() {
 
       router.push(`/sessions/${sid}`);
       // Keep modal open with "Creating..." state — navigation will unmount it
-    } catch (e) {
+    } catch (e: any) {
       console.error("[dashboard] handleCreateSession failed:", e);
+      const msg = e?.message || String(e);
+      if (msg.includes("encoding") || msg.includes("utf") || msg.includes("unicode")) {
+        setCreateSessionError("This file has encoding issues and couldn't be imported. Try re-saving it as UTF-8.");
+      } else if (msg.includes("CSV")) {
+        setCreateSessionError("This CSV file couldn't be parsed. Check that it's a valid CSV.");
+      } else {
+        setCreateSessionError("Something went wrong creating the session. Please try again.");
+      }
       setCreatingSession(false);
-      setShowNewSessionModal(false);
     }
   }
 
@@ -792,6 +801,13 @@ function DashboardContent() {
                     </button>
                   </span>
                 ))}
+              </div>
+            )}
+
+            {/* Error */}
+            {createSessionError && (
+              <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-error/10 border border-error/20 text-error text-xs">
+                {createSessionError}
               </div>
             )}
 

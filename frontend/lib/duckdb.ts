@@ -1,4 +1,5 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
+import jschardet from "jschardet";
 
 let db: duckdb.AsyncDuckDB | null = null;
 let conn: duckdb.AsyncDuckDBConnection | null = null;
@@ -300,9 +301,40 @@ export async function importCSV(
   const c = getConn();
 
   await d.registerFileBuffer(`${tableName}.csv`, csvBytes);
-  await c.query(
-    `CREATE OR REPLACE TABLE "${tableName}" AS SELECT * FROM read_csv_auto('${tableName}.csv')`
-  );
+  try {
+    await c.query(
+      `CREATE OR REPLACE TABLE "${tableName}" AS SELECT * FROM read_csv_auto('${tableName}.csv')`
+    );
+  } catch (e) {
+    // If encoding error, re-decode bytes as Latin-1 (preserves all bytes) and re-register as clean UTF-8
+    const msg = String(e).toLowerCase();
+    if (msg.includes("unicode") || msg.includes("utf") || msg.includes("encoding") || msg.includes("invalid input")) {
+      // Try 1: detect actual encoding and re-decode to UTF-8
+      try {
+        await d.dropFile(`${tableName}.csv`);
+        // jschardet accepts a binary string (each char = one byte)
+        const binaryStr = Array.from(csvBytes, (b) => String.fromCharCode(b)).join("");
+        const detected = jschardet.detect(binaryStr);
+        const encoding = detected?.encoding || "latin1";
+        const decoded = new TextDecoder(encoding, { fatal: false }).decode(csvBytes);
+        const utf8Bytes = new TextEncoder().encode(decoded);
+        await d.registerFileBuffer(`${tableName}.csv`, utf8Bytes);
+        await c.query(
+          `CREATE OR REPLACE TABLE "${tableName}" AS SELECT * FROM read_csv_auto('${tableName}.csv')`
+        );
+      } catch {
+        // Try 2: last resort — skip truly unparseable rows
+        try { await d.dropFile(`${tableName}.csv`); } catch {}
+        await d.registerFileBuffer(`${tableName}.csv`, csvBytes);
+        await c.query(
+          `CREATE OR REPLACE TABLE "${tableName}" AS SELECT * FROM read_csv_auto('${tableName}.csv', ignore_errors=true)`
+        );
+      }
+    } else {
+      await d.dropFile(`${tableName}.csv`);
+      throw e;
+    }
+  }
   await d.dropFile(`${tableName}.csv`);
 
   const metaResult = await c.query(

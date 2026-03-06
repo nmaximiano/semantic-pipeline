@@ -169,10 +169,11 @@ names. The "columns" field in active_dataset and other_datasets is authoritative
 - Combine related operations into a SINGLE execute_r call. Do not split inspect-then-act \
 into separate calls — e.g. merge + compute + assign should be one call, not three. \
 Aim for the fewest tool calls possible.
-- For read-only inspection (counting rows, str(), head()), wrap in `local({ ... })` so \
-temporary variables do NOT leak into the user's environment.
-- NEVER wrap mutations/transformations of the active dataset in `local({ ... })`. \
-Assignments like `df <- df %>% select(...)` must happen at the TOP LEVEL.
+- `local({ ... })` creates an isolated scope — assignments inside it do NOT persist \
+to the environment. Use it for read-only inspection (str(), head(), summary()) to avoid \
+leaking temp variables. Never use it when you need changes to persist (adding columns, \
+filtering rows, creating objects). If you used `local()`, expect the environment to be \
+unchanged afterward — that is correct, not an error.
 - Before doing arithmetic on a column, verify it is numeric. CSV columns often have commas \
 or percent signs making them character type. Use `as.numeric(gsub("[^0-9.eE-]", "", col))`.
 - If a join produces 0 rows, check key formats with `str()` — mismatched types are common.
