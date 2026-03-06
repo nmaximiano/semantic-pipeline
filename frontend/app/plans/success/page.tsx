@@ -188,31 +188,50 @@ export default function SubscriptionSuccess() {
             >
               Dashboard
             </Link>
+            {confirmedPlan && (
+              <Link
+                href="/plans"
+                className={`text-xs font-medium rounded-full px-2.5 py-1 border inline-flex items-center transition-colors cursor-pointer ${
+                  confirmedPlan === "max"
+                    ? "max-badge"
+                    : confirmedPlan === "pro"
+                      ? "pro-badge"
+                      : "border-border bg-surface-alt text-text-secondary"
+                }`}
+              >
+                {confirmedPlan === "max" ? "Max" : "Pro"}
+              </Link>
+            )}
             <SettingsMenu email={session?.user?.email ?? ""} onLogout={handleLogout} />
           </div>
         </div>
       </nav>
 
       <main className="flex-1 flex items-center justify-center bg-surface-alt px-4 relative overflow-hidden">
-        <div className="w-full max-w-sm relative">
-          <ConfettiBlast />
-          <div className={`animate-in rounded-2xl bg-surface shadow-sm p-8 text-center relative overflow-hidden border-transparent ${confirmedPlan === "max" ? "orange-glow-card" : "rainbow-glow-card"}`}>
-            <svg
-              className="w-10 h-10 text-accent mx-auto mb-5"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" />
-            </svg>
+        {!confirmed ? (
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-6 w-6 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+            <p className="text-sm text-text-muted">Confirming your upgrade...</p>
+          </div>
+        ) : (
+          <div className="w-full max-w-sm relative">
+            <ConfettiBlast />
+            <div className={`animate-in rounded-2xl bg-surface shadow-sm p-8 text-center relative overflow-hidden border-transparent ${confirmedPlan === "max" ? "orange-glow-card" : "rainbow-glow-card"}`}>
+              <svg
+                className="w-10 h-10 text-accent mx-auto mb-5"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" />
+              </svg>
 
-            <h1 className="text-xl font-semibold text-text">
-              Welcome to {confirmedPlan === "max" ? "Max" : "Pro"}!
-            </h1>
-            <p className="mt-2 text-sm text-text-muted">
-              Your subscription is active. You now have access to all {confirmedPlan === "max" ? "Max" : "Pro"} features.
-            </p>
+              <h1 className="text-xl font-semibold text-text">
+                Welcome to {confirmedPlan === "max" ? "Max" : "Pro"}!
+              </h1>
+              <p className="mt-2 text-sm text-text-muted">
+                Your subscription is active. You now have access to all {confirmedPlan === "max" ? "Max" : "Pro"} features.
+              </p>
 
-            {confirmed ? (
               <p className="mt-4 text-sm">
                 <span className={`inline-flex items-center gap-1.5 font-medium ${confirmedPlan === "max" ? "text-[var(--color-max)]" : "text-accent"}`}>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -221,28 +240,24 @@ export default function SubscriptionSuccess() {
                   {confirmedPlan === "max" ? "Max" : "Pro"} plan confirmed
                 </span>
               </p>
-            ) : (
-              <p className="mt-4 text-sm text-text-muted">
-                Confirming upgrade...
-              </p>
-            )}
 
-            <div className="flex flex-col gap-3 mt-6">
-              <Link
-                href="/dashboard"
-                className="w-full bg-accent text-white py-3 px-6 rounded-xl text-sm font-medium hover:bg-accent-hover transition-colors inline-block"
-              >
-                Go to dashboard
-              </Link>
-              <Link
-                href="/plans"
-                className="w-full py-3 px-6 rounded-xl text-sm font-medium border border-border text-text-secondary hover:bg-surface-hover transition-colors inline-block"
-              >
-                View plan details
-              </Link>
+              <div className="flex flex-col gap-3 mt-6">
+                <Link
+                  href="/dashboard"
+                  className="w-full bg-accent text-white py-3 px-6 rounded-xl text-sm font-medium hover:bg-accent-hover transition-colors inline-block"
+                >
+                  Go to dashboard
+                </Link>
+                <Link
+                  href="/plans"
+                  className="w-full py-3 px-6 rounded-xl text-sm font-medium border border-border text-text-secondary hover:bg-surface-hover transition-colors inline-block"
+                >
+                  View plan details
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
