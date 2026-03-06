@@ -145,15 +145,6 @@ export default function LandingPage() {
                   )}
                 </Link>
                 <Link
-                  href="/feedback"
-                  className="text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-accent/20"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                  </svg>
-                  Give Feedback
-                </Link>
-                <Link
                   href="/dashboard"
                   className="bg-accent text-white text-xs font-medium px-4 py-1.5 rounded-lg hover:bg-accent-hover transition-colors"
                 >
@@ -304,7 +295,7 @@ export default function LandingPage() {
                 <p className="mt-2 text-base text-text-muted">forever</p>
               </div>
               <div className="mt-8 space-y-4">
-                <CheckItem text="50 message credits per week" />
+                <CheckItem text="25 message credits per week" />
                 <CheckItem text="5 datasets, 100K rows each" />
                 <CheckItem text="50 MB storage" />
                 <CheckItem text="2 basic AI models" />
@@ -337,7 +328,7 @@ export default function LandingPage() {
                 <p className="mt-2 text-base text-text-muted">per month</p>
               </div>
               <div className="mt-8 space-y-4">
-                <CheckItem text="500 message credits per week" />
+                <CheckItem text="250 message credits per week" />
                 <CheckItem text="Unlimited datasets, 500K rows" />
                 <CheckItem text="1 GB storage" />
                 <CheckItem text={<><strong>7 AI models</strong>, price-performance balanced</>} />
@@ -369,7 +360,7 @@ export default function LandingPage() {
                 <p className="mt-2 text-base text-text-muted">per month</p>
               </div>
               <div className="mt-8 space-y-4">
-                <CheckItem text="2,000 message credits per week" />
+                <CheckItem text="1,000 message credits per week" />
                 <CheckItem text="Unlimited datasets, 2M rows" />
                 <CheckItem text="4 GB storage" />
                 <CheckItem text={<><strong>All 11 AI models</strong> including GPT-5.4 &amp; Claude Opus</>} />
@@ -391,7 +382,7 @@ export default function LandingPage() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="mt-8 max-w-5xl mx-auto text-center text-sm text-text-muted"
           >
-            Free: 2 models, 50 msgs/week &nbsp;&middot;&nbsp; Pro: 7 models, 500 msgs/week &nbsp;&middot;&nbsp; Max: all 11 models, 2K msgs/week
+            Free: 2 models, 25 msgs/week &nbsp;&middot;&nbsp; Pro: 7 models, 250 msgs/week &nbsp;&middot;&nbsp; Max: all 11 models, 1K msgs/week
           </motion.div>
         </div>
       </section>
