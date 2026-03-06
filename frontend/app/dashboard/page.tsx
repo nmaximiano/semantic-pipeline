@@ -13,6 +13,7 @@ import SettingsMenu, { type UsageInfo } from "@/components/SettingsMenu";
 import * as sessions from "@/lib/sessions";
 import * as datasets from "@/lib/datasets";
 import { setPendingUploads } from "@/lib/pendingUploads";
+import { seedGettingStarted } from "@/lib/seed";
 import type { Session } from "@supabase/supabase-js";
 import { API } from "@/lib/api";
 import { flushCheckpoint } from "@/lib/duckdb";
@@ -252,7 +253,7 @@ function DashboardContent() {
   /* --- Load data once auth + DuckDB are ready --- */
   useEffect(() => {
     if (!session || !duckdbReady) return;
-    refreshData();
+    seedGettingStarted().then(refreshData);
   }, [session, duckdbReady, refreshData]);
 
   async function fetchAccount(token: string) {
