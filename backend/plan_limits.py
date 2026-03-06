@@ -2,19 +2,19 @@
 
 PLANS = {
     "free": {
-        "credits_per_week": 50,
+        "credits_per_week": 25,
         "max_datasets": 5,
         "max_rows_per_dataset": 100_000,
         "max_storage_bytes": 50 * 1024 * 1024,  # 50 MB
     },
     "pro": {
-        "credits_per_week": 500,
+        "credits_per_week": 250,
         "max_datasets": None,  # unlimited
         "max_rows_per_dataset": 500_000,
         "max_storage_bytes": 1024 * 1024 * 1024,  # 1 GB
     },
     "max": {
-        "credits_per_week": 2000,
+        "credits_per_week": 1000,
         "max_datasets": None,  # unlimited
         "max_rows_per_dataset": 2_000_000,
         "max_storage_bytes": 4 * 1024 * 1024 * 1024,  # 4 GB

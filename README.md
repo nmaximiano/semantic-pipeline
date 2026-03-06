@@ -1,20 +1,19 @@
 # R·Base
 
-In-browser R data science IDE with an integrated AI agent.
+In-browser data science IDE with an integrated AI agent.
 
-Write and run R code, generate ggplot2 visualizations, and analyze datasets — all in your browser with zero setup. An AI agent is built in: describe what you want in plain English and it writes, executes, and iterates on R code for you.
+Upload datasets, write and run R code, generate ggplot2 visualizations, and chat with an AI agent that writes, executes, and iterates on R code for you — all in the browser with zero setup.
 
 **Live:** [tryrbase.com](https://tryrbase.com)
 
 ## How it works
 
 1. Sign up / log in (Supabase Auth — email or Google OAuth)
-2. New users land on a waitlist; beta access is granted manually
-3. Create a session from the dashboard
-4. Upload CSV datasets into the session
-5. Write R code in the console, or chat with the AI agent to generate it
-6. View results in an interactive data table, R console output, and plot gallery
-7. Download transformed datasets as CSV
+2. New users get a pre-loaded "Getting Started" session with sample data
+3. Create sessions, upload CSV/Parquet/Stata/RData datasets
+4. Write R code in the console, or chat with the AI agent to generate it
+5. View results in an interactive data table, R console output, and plot gallery
+6. Download transformed datasets as CSV
 
 R code runs in-browser via WebR (dplyr, ggplot2, tidyr, stringr, lubridate, and more). All data stays client-side in DuckDB-WASM with OPFS persistence — the backend only handles auth, chat routing, and LLM calls.
 
@@ -24,11 +23,11 @@ R code runs in-browser via WebR (dplyr, ggplot2, tidyr, stringr, lubridate, and 
 |-------|-----------|
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
 | Data engine | DuckDB-WASM (OPFS persistence, user-scoped), WebR (in-browser R) |
-| Backend | Python 3.12, FastAPI, OpenRouter (Gemini 2.0 Flash) |
+| Backend | Python 3.12, FastAPI, OpenRouter (multi-model) |
 | Auth | Supabase Auth via `@supabase/ssr` (cookie-based) |
 | Database | Supabase (PostgreSQL) |
 | Error tracking | Sentry (frontend + backend) |
-| Payments | Stripe Subscriptions (currently disabled — beta period) |
+| Payments | Stripe Subscriptions (Free / Pro / Max) |
 
 ## Production infrastructure
 
@@ -38,6 +37,8 @@ R code runs in-browser via WebR (dplyr, ggplot2, tidyr, stringr, lubridate, and 
 | Backend API | Railway | `semantic-pipeline-production.up.railway.app` |
 | Database + Auth | Supabase | Project `fnnienxmuikwobdxnpey` |
 | Error tracking | Sentry | Org: RBase |
+
+Backend runs a single `uvicorn` process (no `--workers` flag) in a Docker container on Railway.
 
 ### MCP servers (for Claude Code)
 
@@ -55,14 +56,11 @@ R code runs in-browser via WebR (dplyr, ggplot2, tidyr, stringr, lubridate, and 
 backend/
   main.py              # FastAPI endpoints
   services.py          # Business logic (SQL-based dataset ops)
-  plan_limits.py       # Free/Pro/Beta plan constants
+  plan_limits.py       # Free/Pro/Max plan constants
   Dockerfile           # Production container (Railway)
   agent/
     agent/
-      base.py          # Base agent (R code execution, ask_user)
-      complex.py       # Multi-step plan-and-execute agent
-      simple.py        # Single-turn agent
-      router.py        # LLM-based query classifier
+      base.py          # Single-loop agent (R code execution, ask_user, plan)
     config.py          # Agent config
     llm.py             # OpenRouter client
     logger.py          # Agent trace logging
@@ -71,21 +69,24 @@ frontend/
   app/
     page.tsx           # Landing page (public)
     login/             # Auth (sign in / sign up)
-    waitlist/          # Waitlist page (free users)
-    dashboard/         # Session list + dataset library
+    dashboard/         # Session list
     sessions/[id]/     # Session workspace (table, chat, plots, R console)
     plans/             # Subscription management
-    feedback/          # Feedback form (beta users only)
+    feedback/          # Feedback form (all authenticated users)
     auth/callback/     # OAuth + email confirmation callback
   components/
     RConsole.tsx        # In-browser R console (WebR)
     SettingsMenu.tsx    # User settings dropdown
-    FeedbackWidget.tsx  # Floating feedback button (beta users)
+    FeedbackWidget.tsx  # Floating feedback button
     session/            # Session workspace sub-components
   lib/
     api.ts             # API URL + getAccessToken helper
     supabase.ts        # Supabase browser client
     supabase-server.ts # Supabase middleware client
+    datasets.ts        # Dataset CRUD (DuckDB)
+    sessions.ts        # Session CRUD (DuckDB)
+    preferences.ts     # User preferences (DuckDB)
+    seed.ts            # Getting Started session seeder
     useSessionData.ts  # Session auth + data hook
     useAgentChat.ts    # Chat SSE + message state hook
     useRuntime.ts      # DuckDB + WebR initialization hook
@@ -94,7 +95,7 @@ frontend/
     webr-duckdb-bridge.ts  # Sync between R and DuckDB
     chatMemory.ts      # Chat history persistence (DuckDB)
     useTheme.ts        # Light/dark theme toggle
-  middleware.ts        # Auth + plan gating middleware
+  middleware.ts        # Auth middleware (protects /dashboard, /sessions, /plans, /feedback)
 ```
 
 ## Local development
@@ -125,7 +126,7 @@ npm install
 npm run dev   # runs on localhost:3000
 ```
 
-Note: build uses `--webpack` flag (Next.js 16 defaults to Turbopack, which conflicts with the WebR/DuckDB webpack config).
+Note: production build uses `--webpack` flag (Next.js 16 defaults to Turbopack, which conflicts with the WebR/DuckDB webpack config).
 
 ## Environment variables
 
@@ -157,18 +158,15 @@ Note: build uses `--webpack` flag (Next.js 16 defaults to Turbopack, which confl
 
 Managed in Supabase dashboard (SQL Editor). Key tables:
 
-- `profiles` — user plan, Stripe IDs, usage counters, `beta_expires_at`
-- `sessions` — workspaces with `history` JSONB for chat memory
-- `session_datasets` — join table with `display_order` for tab ordering
-- `datasets` — file metadata (columns, row count, size)
-- `dataset_rows` / `dataset_rows_original` — row data (original preserved for replay)
-- `jobs` / `pipeline_steps` — agent job tracking
+- `profiles` — user plan (`free`/`pro`/`max`), Stripe IDs, usage counters
+- `feedback` — user feedback submissions
 - `stripe_events` — webhook idempotency
-- `feedback` — beta user feedback
 
 RPC functions:
 - `use_message_credits(p_user_id, p_cost)` — atomic credit deduction with weekly auto-reset
 - `use_transform_rows(p_user_id, p_rows)` — atomic transform row deduction
+
+Note: sessions, datasets, and chat history are stored client-side in DuckDB (see Client-side data architecture below).
 
 ## API endpoints
 
@@ -182,52 +180,39 @@ All endpoints except `/health` and `/webhook/stripe` require `Authorization: Bea
 | `POST` | `/chat/result` | Frontend posts R execution results back |
 | `POST` | `/chat/answer` | Frontend posts user answers to agent questions |
 | `POST` | `/chat/cancel` | Cancel running agent |
-| `POST` | `/feedback` | Submit feedback (beta users only) |
-| `POST` | `/create-checkout-session` | Start Stripe checkout (currently returns 403) |
+| `POST` | `/feedback` | Submit feedback |
+| `POST` | `/create-checkout-session` | Start Stripe checkout |
 | `POST` | `/create-portal-session` | Open Stripe billing portal |
 | `POST` | `/webhook/stripe` | Stripe webhook handler (signature-verified) |
 
 ## Agent architecture
 
-The chat endpoint classifies each message as **simple** or **complex**:
+Single-loop agent that freely interleaves thinking (text) and tool calls. The LLM calls a `done` tool to explicitly end every turn.
 
-- **Simple agent** (2 credits): single-turn R code generation + execution, up to 4 retry rounds
-- **Complex agent** (10 credits): plans a multi-step approach, executes each step, replans after each result, up to 15 rounds
+- **MAX_ROUNDS = 15** per chat turn
+- Streams SSE events: `route`, `message`, `r_code`, `r_code_result`, `plan`, `plan_update`, `ask_user`, `error`
+- R code is executed client-side via WebR; the frontend posts results back to `/chat/result`, forming a backend-frontend execution loop
 
-Both agents stream SSE events: `route`, `message`, `r_code`, `r_code_result`, `plan`, `plan_update`, `ask_user`, `error`.
+Credit cost is per-token via OpenRouter.
 
-R code is executed client-side via WebR. The frontend posts execution results back to `/chat/result`, forming a backend-frontend execution loop.
+## Plans
 
-## Access control
-
-### Waitlist / beta gating
-
-All new users start on the `free` plan and see a waitlist page. Access is gated **server-side in Next.js middleware** — free users are redirected to `/waitlist` for all protected routes (`/dashboard`, `/sessions`, `/plans`, `/feedback`).
-
-**Granting beta access** (via Supabase SQL Editor):
-```sql
-UPDATE profiles SET plan = 'beta', beta_expires_at = NOW() + INTERVAL '1 month'
-WHERE email = 'user@example.com';
-```
-
-Beta auto-expires: the backend checks `beta_expires_at` on each authenticated request and reverts to `free` when expired.
-
-### Plans
-
-| | Free (waitlist) | Beta | Pro ($9/mo, disabled) |
+| | Free | Pro ($9/mo) | Max ($29/mo) |
 |---|---|---|---|
-| Access | Waitlist only | Full | Full |
-| Messages | 50 / week | 500 / week | 500 / week |
+| Credits | 25 / week | 250 / week | 1,000 / week |
 | Datasets | 5 | Unlimited | Unlimited |
-| Rows per dataset | 100K | 500K | 500K |
-| Storage | 50 MB | 1 GB | 1 GB |
-| LLM transforms | Disabled | 500K rows / week | 500K rows / week |
+| Rows per dataset | 100K | 500K | 2M |
+| Storage | 50 MB | 1 GB | 4 GB |
+| LLM transform rows | Disabled | 500K / week | 2M / week |
+| Models | 2 | 7 | 11 |
+| Default model | Gemini 3.1 Flash Lite | Gemini 3 Flash | Gemini 3 Flash |
 
 Credits reset weekly from the user's `period_start` timestamp.
 
 ## Client-side data architecture
 
-- **DuckDB-WASM** stores all dataset and chat data client-side in OPFS, scoped per user (`opfs://kwartz_<userId>.duckdb`)
+- **DuckDB-WASM** stores all dataset, session, and chat data client-side in OPFS, scoped per user (`opfs://kwartz_<userId>.duckdb`)
 - **Checkpoint flushing**: DuckDB WAL is debounce-flushed every 1s, force-flushed on `beforeunload` and logout
 - **OPFS quota handling**: quota errors dispatch a `duckdb-storage-error` CustomEvent, surfaced as a warning banner
 - **COOP/COEP headers**: configured in `next.config.ts` (required for SharedArrayBuffer — used by both DuckDB OPFS and WebR)
+- **Getting Started seed**: on first dashboard load, a sample session with BTC and SPX datasets is created automatically (gated by `getting_started_seeded` preference flag)
