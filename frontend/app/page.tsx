@@ -96,9 +96,6 @@ export default function LandingPage() {
                 <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
-            <span className="text-[10px] font-[family-name:var(--font-geist-mono)] font-medium tracking-widest text-accent border border-accent/40 rounded px-1.5 py-0.5 leading-none">
-              BETA
-            </span>
             <div className="hidden sm:flex items-center gap-5 border-l border-border pl-6">
               <button className="text-sm text-text-secondary hover:text-text transition-colors">
                 Watch Demo
@@ -134,30 +131,28 @@ export default function LandingPage() {
                 <Link
                   href="/plans"
                   className={`text-xs font-medium rounded-full px-2.5 py-1 border inline-flex items-center transition-colors ${
-                    plan === "pro"
-                      ? "pro-badge"
-                      : plan === "beta"
-                        ? "beta-badge"
+                    plan === "max"
+                      ? "max-badge"
+                      : plan === "pro"
+                        ? "pro-badge"
                         : "border-border bg-surface-alt text-text-secondary hover:border-accent-border"
                   }`}
                 >
                   {plan !== null ? (
-                    plan === "pro" ? "Pro" : plan === "beta" ? "Beta" : "Free"
+                    plan === "max" ? "Max" : plan === "pro" ? "Pro" : "Free"
                   ) : (
                     <span className="inline-block h-3 w-7 rounded bg-surface-hover animate-pulse" />
                   )}
                 </Link>
-                {plan === "beta" && (
-                  <Link
-                    href="/feedback"
-                    className="text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-accent/20"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                    </svg>
-                    Give Feedback
-                  </Link>
-                )}
+                <Link
+                  href="/feedback"
+                  className="text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-accent/20"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                  </svg>
+                  Give Feedback
+                </Link>
                 <Link
                   href="/dashboard"
                   className="bg-accent text-white text-xs font-medium px-4 py-1.5 rounded-lg hover:bg-accent-hover transition-colors"
@@ -294,7 +289,7 @@ export default function LandingPage() {
             description="Start free, upgrade when you need more power."
             center
           />
-          <div className="mt-20 max-w-3xl mx-auto grid md:grid-cols-2 gap-6">
+          <div className="mt-20 max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
             {/* Free */}
             <motion.div
               initial={{ opacity: 0, y: 24 }}
@@ -310,10 +305,9 @@ export default function LandingPage() {
               </div>
               <div className="mt-8 space-y-4">
                 <CheckItem text="50 message credits per week" />
-                <CheckItem text="5 datasets" />
-                <CheckItem text="100K rows per dataset" />
+                <CheckItem text="5 datasets, 100K rows each" />
                 <CheckItem text="50 MB storage" />
-                <CheckItem text="No credit card required" />
+                <CheckItem text="2 basic AI models" />
               </div>
               <Link
                 href={ctaHref}
@@ -332,7 +326,6 @@ export default function LandingPage() {
               className="rounded-2xl border border-accent-border bg-surface shadow-xl shadow-indigo-500/5 p-8 relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-400 to-indigo-500" />
-              {/* Recommended badge */}
               <div className="absolute top-4 right-4">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-white bg-accent rounded-full px-2.5 py-1">
                   Popular
@@ -345,14 +338,48 @@ export default function LandingPage() {
               </div>
               <div className="mt-8 space-y-4">
                 <CheckItem text="500 message credits per week" />
-                <CheckItem text="Unlimited datasets" />
-                <CheckItem text="500K rows per dataset" />
+                <CheckItem text="Unlimited datasets, 500K rows" />
                 <CheckItem text="1 GB storage" />
-                <CheckItem text={<><strong>LLM transforms</strong></>} />
+                <CheckItem text={<><strong>7 AI models</strong>, price-performance balanced</>} />
               </div>
-              <div className="mt-8 w-full py-3.5 rounded-xl font-medium border border-border text-text-muted text-center text-base">
-                Coming soon
+              <Link
+                href={isLoggedIn ? "/plans" : "/login"}
+                className="mt-8 w-full py-3.5 rounded-xl font-medium bg-accent text-white hover:bg-accent-hover transition-colors block text-center text-base"
+              >
+                {isLoggedIn ? "Upgrade to Pro" : "Get started"}
+              </Link>
+            </motion.div>
+
+            {/* Max */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="rounded-2xl border border-orange-400/40 bg-surface shadow-lg shadow-orange-500/5 p-8 relative overflow-hidden"
+            >
+              <div className="absolute top-4 right-4">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-max)] bg-[var(--color-max-bg)] rounded-full px-2.5 py-1">
+                  200% Value
+                </span>
               </div>
+              <div className="text-center pt-2">
+                <p className="text-sm font-medium text-[var(--color-max)]">Max</p>
+                <p className="mt-3 text-5xl font-bold text-text tracking-tight">$19</p>
+                <p className="mt-2 text-base text-text-muted">per month</p>
+              </div>
+              <div className="mt-8 space-y-4">
+                <CheckItem text="2,000 message credits per week" />
+                <CheckItem text="Unlimited datasets, 2M rows" />
+                <CheckItem text="4 GB storage" />
+                <CheckItem text={<><strong>All 11 AI models</strong> including GPT-5.4 &amp; Claude Opus</>} />
+              </div>
+              <Link
+                href={isLoggedIn ? "/plans" : "/login"}
+                className="mt-8 w-full py-3.5 rounded-xl font-medium bg-[var(--color-max)] text-white hover:opacity-90 transition-colors block text-center text-base"
+              >
+                {isLoggedIn ? "Upgrade to Max" : "Get started"}
+              </Link>
             </motion.div>
           </div>
 
@@ -361,10 +388,10 @@ export default function LandingPage() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mt-8 max-w-3xl mx-auto text-center text-sm text-text-muted"
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="mt-8 max-w-5xl mx-auto text-center text-sm text-text-muted"
           >
-            Free: 50 msgs/week, 5 datasets &nbsp;&middot;&nbsp; Pro: 500 msgs/week, unlimited datasets, LLM transforms
+            Free: 2 models, 50 msgs/week &nbsp;&middot;&nbsp; Pro: 7 models, 500 msgs/week &nbsp;&middot;&nbsp; Max: all 11 models, 2K msgs/week
           </motion.div>
         </div>
       </section>

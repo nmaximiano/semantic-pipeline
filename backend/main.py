@@ -14,7 +14,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from plan_limits import PLANS, INITIAL_CHAT_COST, TOOL_CALL_COST, STRIPE_PRO_PRICE_ID
+from plan_limits import PLANS, MODEL_COSTS, DEFAULT_MODEL_COST, MODEL_TIERS, DEFAULT_MODEL_BY_PLAN, STRIPE_PRICE_IDS, PRICE_TO_PLAN
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -95,18 +95,7 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
             raise HTTPException(status_code=404, detail="User profile not found")
 
         p = profile.data
-
-        # Auto-expire beta users
         plan = p.get("plan", "free")
-        if plan == "beta" and p.get("beta_expires_at"):
-            expires = datetime.fromisoformat(p["beta_expires_at"])
-            if expires <= datetime.now(timezone.utc):
-                supabase_admin.table("profiles").update({
-                    "plan": "free", "beta_expires_at": None,
-                }).eq("id", user.id).execute()
-                plan = "free"
-                p["beta_expires_at"] = None
-                log.info(f"Beta expired for user {user.id}")
 
         # Tag Sentry events with the authenticated user
         sentry_sdk.set_user({"id": str(user.id), "email": user.email})
@@ -116,11 +105,9 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
             "email": user.email,
             "plan": plan,
             "credits_used": p.get("credits_used", 0),
-            "transform_rows_used": p.get("transform_rows_used", 0),
             "period_start": p.get("period_start"),
             "stripe_customer_id": p.get("stripe_customer_id"),
             "stripe_subscription_id": p.get("stripe_subscription_id"),
-            "beta_expires_at": p.get("beta_expires_at"),
         }
     except HTTPException:
         raise
@@ -141,15 +128,11 @@ async def get_account(user: dict = Depends(get_current_user)):
         "email": user["email"],
         "credits_used": user["credits_used"],
         "credits_limit": limits["credits_per_week"],
-        "transform_rows_used": user["transform_rows_used"],
-        "transform_rows_limit": limits["transform_rows_per_week"],
         "max_datasets": limits["max_datasets"],
         "max_rows_per_dataset": limits["max_rows_per_dataset"],
         "max_storage_bytes": limits["max_storage_bytes"],
         "period_start": user["period_start"],
     }
-    if plan == "beta":
-        resp["beta_expires_at"] = user.get("beta_expires_at")
     return resp
 
 
@@ -164,10 +147,7 @@ class FeedbackRequest(BaseModel):
 @app.post("/feedback")
 @limiter.limit("10/minute")
 async def submit_feedback(request: Request, body: FeedbackRequest, user: dict = Depends(get_current_user)):
-    """Submit feedback. Only available to beta testers."""
-    if user["plan"] != "beta":
-        raise HTTPException(status_code=403, detail="Feedback is only available to beta testers")
-
+    """Submit feedback."""
     try:
         supabase_admin.table("feedback").insert({
             "user_id": str(user["id"]),
@@ -183,13 +163,20 @@ async def submit_feedback(request: Request, body: FeedbackRequest, user: dict = 
 
 # --- Stripe ---
 
+class CheckoutRequest(BaseModel):
+    plan: str = Field(..., pattern="^(pro|max)$")
+
 @app.post("/create-checkout-session")
 @limiter.limit("5/minute")
-async def create_checkout_session(request: Request, user: dict = Depends(get_current_user)):
-    """Create a Stripe Checkout session for Pro subscription."""
-    raise HTTPException(status_code=403, detail="Pro subscriptions are temporarily unavailable")
-    if user["plan"] == "pro":
-        raise HTTPException(status_code=400, detail="Already on Pro plan")
+async def create_checkout_session(request: Request, body: CheckoutRequest, user: dict = Depends(get_current_user)):
+    """Create a Stripe Checkout session for Pro or Max subscription."""
+    current = user["plan"]
+    if current == body.plan:
+        raise HTTPException(status_code=400, detail=f"Already on {body.plan.capitalize()} plan")
+
+    price_id = STRIPE_PRICE_IDS.get(body.plan)
+    if not price_id:
+        raise HTTPException(status_code=400, detail="Invalid plan")
 
     try:
         customer_id = user.get("stripe_customer_id")
@@ -206,11 +193,11 @@ async def create_checkout_session(request: Request, user: dict = Depends(get_cur
         session = stripe.checkout.Session.create(
             customer=customer_id,
             payment_method_types=["card"],
-            line_items=[{"price": STRIPE_PRO_PRICE_ID, "quantity": 1}],
+            line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
             success_url=f"{FRONTEND_URL}/plans/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{FRONTEND_URL}/plans",
-            metadata={"user_id": str(user["id"])},
+            metadata={"user_id": str(user["id"]), "plan": body.plan},
         )
         return {"url": session.url}
     except Exception as e:
@@ -273,14 +260,23 @@ async def stripe_webhook(request: Request):
             if session_obj.get("mode") == "subscription" and session_obj.get("payment_status") == "paid":
                 user_id = session_obj["metadata"]["user_id"]
                 subscription_id = session_obj.get("subscription")
+                # Determine plan from metadata (set during checkout) or fall back to price lookup
+                new_plan = session_obj.get("metadata", {}).get("plan")
+                if not new_plan and subscription_id:
+                    try:
+                        sub = stripe.Subscription.retrieve(subscription_id)
+                        price_id = sub["items"]["data"][0]["price"]["id"]
+                        new_plan = PRICE_TO_PLAN.get(price_id, "pro")
+                    except Exception:
+                        new_plan = "pro"
+                new_plan = new_plan or "pro"
                 supabase_admin.table("profiles").update({
-                    "plan": "pro",
+                    "plan": new_plan,
                     "stripe_subscription_id": subscription_id,
                     "credits_used": 0,
-                    "transform_rows_used": 0,
                     "period_start": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", user_id).execute()
-                log.info(f"Stripe: user {user_id} upgraded to Pro (sub={subscription_id})")
+                log.info(f"Stripe: user {user_id} upgraded to {new_plan.capitalize()} (sub={subscription_id})")
 
         elif event_type == "customer.subscription.deleted":
             sub_obj = event["data"]["object"]
@@ -322,6 +318,7 @@ class ChatRequest(BaseModel):
     dataset_context: dict | None = None
     other_dataframes: list[dict] | None = None
     history: list | None = None
+    model: str | None = None
 
 
 @app.post("/chat")
@@ -329,7 +326,8 @@ class ChatRequest(BaseModel):
 async def chat_endpoint(request: Request, body: ChatRequest, user: dict = Depends(get_current_user)):
     async def event_stream():
         from agent.agent import Agent
-        from agent.logger import log as alog
+        import logging as _logging
+        alog = _logging.getLogger("agent").info
 
         # Prevent concurrent agents per user
         if user["id"] in _active_agents:
@@ -339,36 +337,69 @@ async def chat_endpoint(request: Request, body: ChatRequest, user: dict = Depend
 
         alog(f"Chat request: message={body.message[:80]!r}")
 
-        # Deduct initial chat cost (covers the LLM call)
+        # Validate model if provided + enforce plan tier
+        from agent.config import ALLOWED_MODELS, AGENT_MODEL
+        plan = user["plan"]
+        allowed_for_plan = MODEL_TIERS.get(plan, MODEL_TIERS["free"])
+        default_model = DEFAULT_MODEL_BY_PLAN.get(plan, AGENT_MODEL)
+        model = default_model
+        if body.model and body.model in ALLOWED_MODELS:
+            if body.model in allowed_for_plan:
+                model = body.model
+            else:
+                yield f"data: {json.dumps({'type': 'error', 'code': 'model_not_available', 'detail': f'Your {plan} plan does not include this model. Upgrade to access it.'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+        import math
+        costs = MODEL_COSTS.get(model, DEFAULT_MODEL_COST)
+
+        # Gate: check user has enough credits to start this model
         pre = supabase_admin.rpc("use_message_credits", {
             "p_user_id": str(user["id"]),
-            "p_cost": INITIAL_CHAT_COST,
+            "p_cost": costs["min_credits"],
         }).execute()
         if not pre.data["allowed"]:
             yield f"data: {json.dumps({'type': 'error', 'code': 'quota_exceeded', 'plan': user['plan'], 'credits_used': pre.data.get('credits_used', 0), 'credits_limit': pre.data.get('credits_limit', 0)})}\n\n"
             yield "data: [DONE]\n\n"
             return
 
-        # Per-tool-call budget: deducts TOOL_CALL_COST before each execute_r
-        def check_tool_budget() -> bool:
+        # Track total credits charged for usage logging
+        credits_tracker = [costs["min_credits"]]  # mutable; starts with gate cost
+        prepaid = [costs["min_credits"]]  # tracks how much of the gate is still unused
+
+        # Token-based charging: called after each LLM round with actual tokens
+        def charge_round_tokens(round_num: int, input_tokens: int, output_tokens: int) -> bool:
+            token_credits = math.ceil(
+                input_tokens * costs["input_per_m"] / 1_000_000
+                + output_tokens * costs["output_per_m"] / 1_000_000
+            )
+            # Subtract any remaining prepaid gate credits
+            to_charge = max(0, token_credits - prepaid[0])
+            prepaid[0] = max(0, prepaid[0] - token_credits)
+            if to_charge <= 0:
+                return True
             try:
                 r = supabase_admin.rpc("use_message_credits", {
                     "p_user_id": str(user["id"]),
-                    "p_cost": TOOL_CALL_COST,
+                    "p_cost": to_charge,
                 }).execute()
                 allowed = r.data["allowed"]
-                alog(f"Tool budget check: allowed={allowed}")
+                if allowed:
+                    credits_tracker[0] += to_charge
+                alog(f"Token charge: {token_credits} total, {to_charge} charged ({input_tokens} in, {output_tokens} out), allowed={allowed}")
                 return allowed
             except Exception as e:
-                alog(f"Tool budget check failed: {e}")
+                alog(f"Token charge failed: {e}")
                 return True  # fail open
 
         agent = Agent(
             body.message, body.dataset_context,
             user["id"], body.session_id, body.history,
             other_dataframes=body.other_dataframes,
-            check_tool_budget=check_tool_budget,
+            charge_tokens=charge_round_tokens,
             user_plan=user["plan"],
+            model=model,
+            credits_tracker=credits_tracker,
         )
         _active_agents[user["id"]] = agent
 
@@ -383,8 +414,6 @@ async def chat_endpoint(request: Request, body: ChatRequest, user: dict = Depend
 
         try:
             async for event in agent.run():
-                if event.get("type") != "message_delta":
-                    agent.alog.sse_event(event)
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             agent.alog.error("agent_exception", f"{type(e).__name__}: {e}")
@@ -460,3 +489,31 @@ async def chat_result(body: ChatResultRequest, user: dict = Depends(get_current_
         "updated_context": updated_context,
     })
     return {"received": True}
+
+
+# --- Conversation Reports ---
+
+class ReportConversationRequest(BaseModel):
+    session_id: str = Field(..., max_length=100)
+    note: str | None = Field(None, max_length=2000)
+    messages: list = Field(...)
+    chat_history: list | None = None
+
+
+@app.post("/conversations/report")
+@limiter.limit("5/minute")
+async def report_conversation(request: Request, body: ReportConversationRequest, user: dict = Depends(get_current_user)):
+    """Upload a conversation snapshot for review."""
+    try:
+        result = supabase_admin.table("conversation_reports").insert({
+            "user_id": str(user["id"]),
+            "session_id": body.session_id,
+            "note": body.note,
+            "messages": body.messages,
+            "chat_history": body.chat_history,
+        }).execute()
+        report_id = result.data[0]["id"] if result.data else None
+        return {"status": "received", "id": report_id}
+    except Exception as e:
+        log.error(f"Report insert error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit report")

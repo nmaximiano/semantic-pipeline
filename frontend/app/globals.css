@@ -33,6 +33,10 @@
   --color-beta-bg: rgba(139, 92, 246, 0.08);
   --color-beta-border: rgba(139, 92, 246, 0.25);
   --color-beta-border-hover: rgba(139, 92, 246, 0.45);
+  --color-max: #f97316;
+  --color-max-bg: rgba(249, 115, 22, 0.08);
+  --color-max-border: rgba(249, 115, 22, 0.25);
+  --color-max-border-hover: rgba(249, 115, 22, 0.45);
 }
 
 /* ── Dark mode overrides ── */
@@ -66,6 +70,10 @@ html.dark {
   --color-beta-bg: rgba(167, 139, 250, 0.10);
   --color-beta-border: rgba(167, 139, 250, 0.25);
   --color-beta-border-hover: rgba(167, 139, 250, 0.45);
+  --color-max: #fb923c;
+  --color-max-bg: rgba(251, 146, 60, 0.10);
+  --color-max-border: rgba(251, 146, 60, 0.25);
+  --color-max-border-hover: rgba(251, 146, 60, 0.45);
   color-scheme: dark;
 }
 
@@ -141,6 +149,22 @@ input[type="button"], input[type="reset"], input[type="file"] {
 }
 .beta-badge:hover {
   border-color: var(--color-beta-border-hover);
+}
+
+/* Pro badge */
+.pro-badge {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+/* Max badge */
+.max-badge {
+  color: var(--color-max);
+  background: var(--color-max-bg);
+  border-color: var(--color-max-border);
+}
+.max-badge:hover {
+  border-color: var(--color-max-border-hover);
 }
 
 /* Scrollbar styling */
@@ -387,6 +411,59 @@ html {
 }
 
 @property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* ─── Orange glow (Max card) ─── */
+@keyframes orange-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(249, 115, 22, 0.25),
+      0 0 40px rgba(251, 146, 60, 0.1),
+      0 0 60px rgba(249, 115, 22, 0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 25px rgba(249, 115, 22, 0.35),
+      0 0 50px rgba(251, 146, 60, 0.15),
+      0 0 70px rgba(249, 115, 22, 0.08);
+  }
+}
+
+@keyframes orange-border {
+  0% { --orange-angle: 0deg; }
+  100% { --orange-angle: 360deg; }
+}
+
+.orange-glow-card {
+  animation: orange-glow 4s ease-in-out infinite;
+}
+
+.orange-glow-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--orange-angle, 0deg),
+    #f97316,
+    #fb923c,
+    #fbbf24,
+    #f59e0b,
+    #ea580c,
+    #f97316
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: orange-border 4s linear infinite;
+  pointer-events: none;
+}
+
+@property --orange-angle {
   syntax: '<angle>';
   initial-value: 0deg;
   inherits: false;

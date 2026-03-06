@@ -6,8 +6,18 @@ import time
 from typing import AsyncGenerator
 
 from agent.llm import tool_completion_stream
-from agent.config import TOOLS, SYSTEM_PROMPT, MAX_ROUNDS, CONTEXT_WINDOW
+from agent.config import TOOLS, SYSTEM_PROMPT, MAX_ROUNDS, CONTEXT_WINDOW, HISTORY_TAIL, AGENT_MODEL
 from agent.logger import AgentLogger
+
+_supabase_admin = None
+
+def _get_supabase_admin():
+    global _supabase_admin
+    if _supabase_admin is None:
+        import os
+        from supabase import create_client
+        _supabase_admin = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+    return _supabase_admin
 
 
 # -- Cancel support -----------------------------------------------------------
@@ -29,14 +39,18 @@ class Agent:
                  user_id: str, session_id: str,
                  history: list | None = None,
                  other_dataframes: list[dict] | None = None,
-                 check_tool_budget=None,
-                 user_plan: str = "free"):
+                 charge_tokens=None,
+                 user_plan: str = "free",
+                 model: str = AGENT_MODEL,
+                 credits_tracker: list[int] | None = None):
         self.message = message
         self.dataset_context = dataset_context
         self.user_id = user_id
         self.session_id = session_id
-        self.check_tool_budget = check_tool_budget  # callable() -> bool
+        self.charge_tokens = charge_tokens  # callable(round, input_tok, output_tok) -> bool
         self.user_plan = user_plan
+        self.model = model
+        self.credits_tracker = credits_tracker or [0]
 
         self.alog = AgentLogger()
         self.ds_context = self._build_dataset_context(dataset_context, history, other_dataframes)
@@ -47,6 +61,7 @@ class Agent:
 
         self.result_queues: dict[str, asyncio.Queue] = {}
         self.final_response = ""
+        self.current_plan: list[dict] | None = None
         self._cleaned_up = False
 
     @staticmethod
@@ -59,7 +74,9 @@ class Agent:
         if other_dataframes:
             ctx["other_datasets"] = other_dataframes
         if history:
-            ctx["conversation_history"] = history
+            # Only keep the last HISTORY_TAIL turns to avoid bloating the system prompt.
+            # The agent's own tool-call loop provides immediate context.
+            ctx["conversation_history"] = history[-HISTORY_TAIL:]
         return ctx
 
     def _build_system_message(self) -> str:
@@ -68,6 +85,8 @@ class Agent:
             "instructions": SYSTEM_PROMPT,
         }
         sys.update(self.ds_context)
+        if self.current_plan:
+            sys["active_plan"] = self.current_plan
         return json.dumps(sys, indent=2)
 
     def _sliding_window(self, messages: list[dict]) -> list[dict]:
@@ -78,6 +97,10 @@ class Agent:
 
     async def run(self) -> AsyncGenerator[dict, None]:
         self.alog(f"Chat start: {repr(self.message)[:100]}")
+
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_tool_calls = 0
 
         try:
             messages: list[dict] = [
@@ -93,21 +116,43 @@ class Agent:
 
                 # Refresh system message with latest dataset schema
                 messages[0] = {"role": "system", "content": self._build_system_message()}
+
+                # On the final round, nudge the LLM to wrap up with text
+                if _round == MAX_ROUNDS - 1:
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "You have reached your last action. Do NOT call any tools. "
+                            "Summarize what you've accomplished so far and what remains, "
+                            "then ask the user if they'd like you to continue."
+                        ),
+                    })
+
                 trimmed = self._sliding_window(messages)
 
                 self.alog.llm_call_start("agent", _round)
                 self.alog.round_input(_round, trimmed)
                 t0 = time.monotonic()
-                stream = await tool_completion_stream(trimmed, TOOLS)
+                stream = await tool_completion_stream(trimmed, TOOLS, model=self.model)
 
                 # Accumulate streamed content and tool call deltas
                 full_content = ""
                 tool_call_buffers: dict[int, dict] = {}  # index -> {id, name, arguments}
                 finish_reason = None
+                round_input = 0
+                round_output = 0
 
                 async for chunk in stream:
                     if self.cancel.is_set():
                         break
+
+                    # Capture usage from final chunk (stream_options include_usage)
+                    if getattr(chunk, "usage", None):
+                        round_input = getattr(chunk.usage, "prompt_tokens", 0)
+                        round_output = getattr(chunk.usage, "completion_tokens", 0)
+                        self._total_input_tokens += round_input
+                        self._total_output_tokens += round_output
+
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if not delta:
                         continue
@@ -136,6 +181,14 @@ class Agent:
 
                 dt = time.monotonic() - t0
                 self.alog.llm_call_end("agent", dt, _round)
+
+                # Charge credits based on actual token usage for this round
+                if self.charge_tokens and (round_input + round_output) > 0:
+                    if not self.charge_tokens(_round, round_input, round_output):
+                        self.alog(f"Token budget exhausted at round {_round}")
+                        yield {"type": "error", "code": "quota_exceeded",
+                               "plan": self.user_plan}
+                        return
 
                 # Emit message_done with accumulated text
                 if full_content:
@@ -180,6 +233,7 @@ class Agent:
                     return
 
                 # Execute each tool call
+                self._total_tool_calls += len(reconstructed_tool_calls)
                 for tc in reconstructed_tool_calls:
                     tool_name = tc.function.name
                     try:
@@ -192,19 +246,6 @@ class Agent:
                     if tool_name == "execute_r":
                         code = tool_args.get("code", "")
                         description = tool_args.get("description", "")
-
-                        # Check budget before executing
-                        if self.check_tool_budget:
-                            if not self.check_tool_budget():
-                                self.alog(f"Budget exhausted at round {_round}")
-                                yield {"type": "error", "code": "quota_exceeded",
-                                       "plan": self.user_plan}
-                                messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": tc.id,
-                                    "content": "Error: message credit quota exceeded.",
-                                })
-                                return
 
                         # Send R code to frontend
                         execution_id = str(uuid.uuid4())
@@ -234,7 +275,7 @@ class Agent:
                         error = result.get("error", "")
 
                         if success:
-                            result_text = stdout[:2000] if stdout else "Executed successfully."
+                            result_text = stdout[:1000] if stdout else "Executed successfully."
                         else:
                             if error.startswith("Error: "):
                                 error = error[7:]
@@ -262,20 +303,21 @@ class Agent:
                         })
 
                     elif tool_name == "plan":
-                        steps = tool_args.get("steps", [])
-                        # Normalize steps with IDs
-                        normalized = [
-                            {"id": i + 1, "description": s.get("description", ""), "status": s.get("status", "pending")}
-                            for i, s in enumerate(steps)
+                        raw_steps = tool_args.get("steps", [])
+                        # Normalize: accept list of strings or list of {description}
+                        steps = [
+                            s if isinstance(s, str) else s.get("description", "")
+                            for s in raw_steps
                         ]
-                        self.alog.plan(normalized, all(s["status"] == "done" for s in normalized))
+                        self.current_plan = steps
+                        self.alog.plan(steps, False)
 
-                        yield {"type": "plan", "steps": normalized}
+                        yield {"type": "plan", "steps": steps}
 
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": "Plan displayed to user.",
+                            "content": "Plan updated.",
                         })
 
                     elif tool_name == "ask_user":
@@ -333,10 +375,27 @@ class Agent:
             queue.put_nowait(result)
 
     def cleanup(self):
-        """Call in finally block: remove cancel event, flush logs."""
+        """Call in finally block: remove cancel event, flush logs, log usage."""
         if self._cleaned_up:
             return
         self._cleaned_up = True
         if self.user_id:
             _cancel_events.pop(self.user_id, None)
         self.alog.flush()
+        self._log_usage()
+
+    def _log_usage(self):
+        """Insert LLM usage row into Supabase."""
+        try:
+            client = _get_supabase_admin()
+            client.table("llm_usage").insert({
+                "user_id": self.user_id,
+                "session_id": self.session_id,
+                "model": self.model,
+                "input_tokens": getattr(self, "_total_input_tokens", 0),
+                "output_tokens": getattr(self, "_total_output_tokens", 0),
+                "tool_calls": getattr(self, "_total_tool_calls", 0),
+                "credits_charged": self.credits_tracker[0],
+            }).execute()
+        except Exception as e:
+            self.alog(f"Failed to log LLM usage: {e}")

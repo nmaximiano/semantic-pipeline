@@ -39,7 +39,7 @@ export default function FeedbackWidget({ plan }: FeedbackWidgetProps) {
     return () => clearTimeout(t);
   }, [success]);
 
-  if (plan !== "beta") return null;
+  if (!plan) return null;
 
   async function handleSubmit() {
     if (!message.trim() || submitting) return;
@@ -98,7 +98,7 @@ export default function FeedbackWidget({ plan }: FeedbackWidgetProps) {
                     onClick={() => setCategory(c)}
                     className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors capitalize ${
                       category === c
-                        ? "border-[var(--color-beta-border)] bg-[var(--color-beta-bg)] text-[var(--color-beta)]"
+                        ? "border-accent/50 bg-accent/10 text-accent"
                         : "border-border text-text-muted hover:text-text hover:bg-surface-alt"
                     }`}
                   >
@@ -113,7 +113,7 @@ export default function FeedbackWidget({ plan }: FeedbackWidgetProps) {
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="What's on your mind?"
                 rows={3}
-                className="w-full bg-surface-alt border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:border-[var(--color-beta-border)] transition-colors resize-none"
+                className="w-full bg-surface-alt border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:border-accent/50 transition-colors resize-none"
               />
 
               {error && (
@@ -124,7 +124,7 @@ export default function FeedbackWidget({ plan }: FeedbackWidgetProps) {
               <button
                 onClick={handleSubmit}
                 disabled={!message.trim() || submitting}
-                className="w-full py-2 rounded-lg text-sm font-medium bg-[var(--color-beta)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                className="w-full py-2 rounded-lg text-sm font-medium bg-accent text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
               >
                 {submitting ? "Sending..." : "Send feedback"}
               </button>
@@ -138,10 +138,10 @@ export default function FeedbackWidget({ plan }: FeedbackWidgetProps) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-14 right-0 w-64 bg-surface border border-[var(--color-beta-border)] rounded-xl shadow-xl p-4 text-center"
+            className="absolute bottom-14 right-0 w-64 bg-surface border border-accent/30 rounded-xl shadow-xl p-4 text-center"
           >
-            <div className="w-8 h-8 rounded-full bg-[var(--color-beta-bg)] flex items-center justify-center mx-auto mb-2">
-              <svg className="w-4 h-4 text-[var(--color-beta)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-2">
+              <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </div>
@@ -153,7 +153,7 @@ export default function FeedbackWidget({ plan }: FeedbackWidgetProps) {
       {/* Floating button */}
       <button
         onClick={() => { setOpen(!open); setSuccess(false); setError(""); }}
-        className="w-10 h-10 rounded-full bg-[var(--color-beta)] text-white shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center"
+        className="w-10 h-10 rounded-full bg-accent text-white shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center"
         title="Send feedback"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

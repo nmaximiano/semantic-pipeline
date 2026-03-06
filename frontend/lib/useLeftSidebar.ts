@@ -9,7 +9,7 @@ const SIDEBAR_MAX = 400;
 const SIDEBAR_DEFAULT = 260;
 
 export function useLeftSidebar() {
-  const [activeTab, setActiveTab] = useState<SidebarTab>("env");
+  const [activeTab, setActiveTab] = useState<SidebarTab>("plots");
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const isDragging = useRef(false);
   const dragStartX = useRef(0);

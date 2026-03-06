@@ -57,7 +57,7 @@ function LoginContent() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-      router.push("/waitlist");
+      router.push("/dashboard");
     } catch (e: any) {
       setError(e.message || "Authentication failed");
     } finally {
@@ -125,7 +125,7 @@ function LoginContent() {
                   </svg>
                 </div>
                 <p className="text-sm text-text-muted mb-5">
-                  Click the link in the email to confirm your account. You&apos;ll be added to our waitlist and notified when your access is ready.
+                  Click the link in the email to confirm your account.
                 </p>
                 <button
                   onClick={() => { setCheckEmail(false); setIsSignUp(false); }}
@@ -145,7 +145,7 @@ function LoginContent() {
               {isSignUp ? "Create an account" : "Welcome back"}
             </h1>
             <p className="mt-2 text-sm text-text-muted">
-              {isSignUp ? "Sign up to join the waitlist" : "Sign in to continue"}
+              {isSignUp ? "Sign up to get started" : "Sign in to continue"}
             </p>
           </div>
 

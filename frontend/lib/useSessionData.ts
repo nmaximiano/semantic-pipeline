@@ -8,12 +8,14 @@ import type { DatasetMeta } from "@/lib/registry";
 import type { Session } from "@supabase/supabase-js";
 import { API } from "@/lib/api";
 import { flushCheckpoint } from "@/lib/duckdb";
+import type { UsageInfo } from "@/components/SettingsMenu";
 
 export function useSessionData(sessionId: string, duckdbReady: boolean) {
   const router = useRouter();
 
   const [session, setSession] = useState<Session | null>(null);
   const [plan, setPlan] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [sessionName, setSessionName] = useState("");
   const [sessionDatasets, setSessionDatasets] = useState<DatasetMeta[]>([]);
@@ -70,10 +72,16 @@ export function useSessionData(sessionId: string, duckdbReady: boolean) {
       if (res.ok) {
         const data = await res.json();
         setPlan(data.plan);
+        setUsage({ credits_used: data.credits_used, credits_limit: data.credits_limit, period_start: data.period_start });
       }
     } catch (e) {
       console.error("[useSessionData] fetchAccount failed:", e);
     }
+  }
+
+  async function refreshUsage() {
+    const { data: { session: s } } = await supabase.auth.getSession();
+    if (s) fetchAccount(s.access_token);
   }
 
   async function fetchSessionLocal() {
@@ -127,7 +135,7 @@ export function useSessionData(sessionId: string, duckdbReady: boolean) {
   }
 
   return {
-    session, plan, authLoading,
+    session, plan, usage, authLoading,
     sessionName, setSessionName,
     sessionDatasets, setSessionDatasets, sessionDatasetsRef,
     activeDatasetId, setActiveDatasetId,
@@ -138,5 +146,6 @@ export function useSessionData(sessionId: string, duckdbReady: boolean) {
     sessionRenameRef, handleSessionRename,
     handleLogout,
     fetchSessionLocal,
+    refreshUsage,
   };
 }

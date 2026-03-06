@@ -6,7 +6,6 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/useTheme";
 import SettingsMenu from "@/components/SettingsMenu";
-import FeedbackWidget from "@/components/FeedbackWidget";
 import type { Session } from "@supabase/supabase-js";
 import { API, getAccessToken } from "@/lib/api";
 import { flushCheckpoint } from "@/lib/duckdb";
@@ -56,9 +55,6 @@ export default function FeedbackPage() {
       if (res.ok) {
         const data = await res.json();
         setPlan(data.plan);
-        if (data.plan !== "beta") {
-          router.push("/dashboard");
-        }
       }
     } catch (e) {
       console.error("[feedback] fetchAccount failed:", e);
@@ -128,8 +124,6 @@ export default function FeedbackPage() {
     );
   }
 
-  if (plan !== "beta") return null;
-
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <nav className="shrink-0 border-b border-border bg-surface px-5 py-4">
@@ -140,9 +134,6 @@ export default function FeedbackPage() {
                 <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
-            <span className="text-[10px] font-[family-name:var(--font-geist-mono)] font-medium tracking-widest text-accent border border-accent/40 rounded px-1.5 py-0.5 leading-none">
-              BETA
-            </span>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -160,12 +151,6 @@ export default function FeedbackPage() {
                 </svg>
               )}
             </button>
-            <Link
-              href="/plans"
-              className="text-xs font-medium rounded-full px-2.5 py-1 border inline-flex items-center transition-colors beta-badge"
-            >
-              Beta
-            </Link>
             <Link
               href="/dashboard"
               className="bg-accent text-white text-xs font-medium px-4 py-1.5 rounded-lg hover:bg-accent-hover transition-colors"
@@ -202,7 +187,7 @@ export default function FeedbackPage() {
                     onClick={() => setCategory(c)}
                     className={`text-sm font-medium px-4 py-2 rounded-lg border transition-colors capitalize ${
                       category === c
-                        ? "border-[var(--color-beta-border)] bg-[var(--color-beta-bg)] text-[var(--color-beta)]"
+                        ? "border-accent/50 bg-accent/10 text-accent"
                         : "border-border text-text-muted hover:text-text hover:bg-surface-alt"
                     }`}
                   >
@@ -226,7 +211,7 @@ export default function FeedbackPage() {
                       : "What's on your mind?"
                 }
                 rows={5}
-                className="w-full bg-surface-alt border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted outline-none focus:border-[var(--color-beta-border)] transition-colors resize-none"
+                className="w-full bg-surface-alt border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted outline-none focus:border-accent/50 transition-colors resize-none"
               />
             </div>
 
@@ -240,7 +225,7 @@ export default function FeedbackPage() {
             )}
 
             {success && (
-              <div className="flex items-center gap-2 text-sm text-[var(--color-beta)]">
+              <div className="flex items-center gap-2 text-sm text-accent">
                 <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                 </svg>
@@ -251,7 +236,7 @@ export default function FeedbackPage() {
             <button
               onClick={handleSubmit}
               disabled={!message.trim() || submitting}
-              className="w-full py-2.5 rounded-xl text-sm font-medium bg-[var(--color-beta)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+              className="w-full py-2.5 rounded-xl text-sm font-medium bg-accent text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
             >
               {submitting ? "Sending..." : "Submit feedback"}
             </button>
@@ -259,7 +244,6 @@ export default function FeedbackPage() {
         </div>
       </main>
 
-      <FeedbackWidget plan={plan} />
     </div>
   );
 }

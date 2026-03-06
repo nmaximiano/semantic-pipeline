@@ -27,6 +27,8 @@ interface LeftSidebarProps {
   activeStableId: string | null;
   onObjectClick: (stableId: string) => void;
   envReady: boolean;
+  onRunCode: (code: string) => Promise<void>;
+  onRefreshEnv: () => Promise<void>;
   // Plot panel
   plots: StoredPlot[];
   onDeletePlot: (plotId: string) => void;
@@ -83,6 +85,8 @@ export function LeftSidebar({
   activeStableId,
   onObjectClick,
   envReady,
+  onRunCode,
+  onRefreshEnv,
   plots,
   onDeletePlot,
   onClearPlots,
@@ -136,6 +140,8 @@ export function LeftSidebar({
               activeStableId={activeStableId}
               onObjectClick={onObjectClick}
               envReady={envReady}
+              onRunCode={onRunCode}
+              onRefreshEnv={onRefreshEnv}
             />
           )}
           {activeTab === "plots" && (

@@ -3,14 +3,28 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
+export interface UsageInfo {
+  credits_used: number;
+  credits_limit: number;
+  period_start: string;
+}
+
 interface SettingsMenuProps {
   email: string;
   onLogout: () => void;
   onClearData?: () => void;
   plan?: string;
+  usage?: UsageInfo | null;
 }
 
-export default function SettingsMenu({ email, onLogout, onClearData, plan }: SettingsMenuProps) {
+function daysUntilReset(periodStart: string): number {
+  const start = new Date(periodStart);
+  const reset = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  return Math.max(0, Math.ceil((reset.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+export default function SettingsMenu({ email, onLogout, onClearData, plan, usage }: SettingsMenuProps) {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,6 +43,10 @@ export default function SettingsMenu({ email, onLogout, onClearData, plan }: Set
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  const pct = usage ? Math.min(100, (usage.credits_used / usage.credits_limit) * 100) : 0;
+  const remaining = usage ? Math.max(0, usage.credits_limit - usage.credits_used) : 0;
+  const resetDays = usage ? daysUntilReset(usage.period_start) : 0;
 
   return (
     <div
@@ -52,24 +70,43 @@ export default function SettingsMenu({ email, onLogout, onClearData, plan }: Set
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded-lg shadow-lg z-50 py-1">
+        <div className="absolute right-0 top-full mt-1 w-56 bg-surface border border-border rounded-lg shadow-lg z-50 py-1">
           <div className="px-3.5 py-2.5 text-xs text-text-muted truncate border-b border-border">
             {email}
           </div>
+
+          {usage && (
+            <div className="px-3.5 py-2.5 border-b border-border space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-text-muted">Weekly credits</span>
+                <span className="text-text tabular-nums">{remaining} left</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-border/60 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-accent"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-text-muted">
+                {usage.credits_used}/{usage.credits_limit} used &middot; resets in {resetDays}d
+              </div>
+            </div>
+          )}
+
           <Link
             href="/plans"
             className="block px-3.5 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
           >
             Subscription
           </Link>
-          {plan === "beta" && (
-            <Link
-              href="/feedback"
-              className="block px-3.5 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
-            >
-              Send Feedback
-            </Link>
-          )}
+          <Link
+            href="/feedback"
+            className="block px-3.5 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
+          >
+            Send Feedback
+          </Link>
           {onClearData && (
             <button
               onClick={onClearData}

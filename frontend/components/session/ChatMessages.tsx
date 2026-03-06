@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import type { ChatMessage } from "@/lib/session-types";
+import { highlightR } from "@/components/RConsole";
 import { formatToolName } from "@/lib/format";
 import { PlotLightbox } from "./PlotLightbox";
 
@@ -67,13 +68,34 @@ export const ToolMessageItem = memo(function ToolMessageItem({ msg }: { msg: Cha
   );
 });
 
+/** Strip markdown images with non-renderable src (attachment://, empty, etc.) */
+function stripBrokenImages(text: string): string {
+  return text.replace(/!\[[^\]]*\]\((?:attachment:\/\/[^)]*|)\)/g, "");
+}
+
+const consoleFontStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-source-code-pro), "Source Code Pro", ui-monospace, monospace',
+};
+
+const mdComponents: Record<string, React.ComponentType<React.HTMLAttributes<HTMLElement> & { node?: unknown }>> = {
+  code({ className, children, node, ...props }: React.HTMLAttributes<HTMLElement> & { node?: unknown }) {
+    const isBlock = className?.startsWith("language-");
+    const text = String(children).replace(/\n$/, "");
+    if (isBlock) {
+      return <code className={`${className ?? ""} !text-sm`} style={consoleFontStyle} {...props}>{highlightR(text)}</code>;
+    }
+    // Inline code
+    return <code style={consoleFontStyle} {...props}>{highlightR(text)}</code>;
+  },
+  pre({ children, node, ...props }: React.HTMLAttributes<HTMLElement> & { node?: unknown }) {
+    return <pre style={consoleFontStyle} {...props}>{children}</pre>;
+  },
+};
+
 export const AssistantMessageItem = memo(function AssistantMessageItem({ msg }: { msg: ChatMessage }) {
   return (
-    <div className="pr-8 prose prose-sm max-w-none text-text prose-headings:text-text prose-strong:text-text prose-p:text-text prose-li:text-text prose-th:text-text-secondary prose-td:text-text prose-code:text-accent prose-a:text-accent prose-pre:bg-surface-alt prose-pre:border prose-pre:border-border prose-thead:border-border prose-tr:border-border">
-      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{prepareMath(msg.text)}</ReactMarkdown>
-      {msg.isStreaming && (
-        <span className="inline-block w-2 h-4 bg-accent/70 rounded-sm animate-pulse ml-0.5 align-text-bottom" />
-      )}
+    <div className="pr-8 prose prose-sm max-w-none text-text prose-headings:text-text prose-strong:text-text prose-p:text-text prose-li:text-text prose-th:text-text-secondary prose-td:text-text prose-a:text-accent prose-pre:bg-surface prose-pre:border prose-pre:border-border prose-thead:border-border prose-tr:border-border">
+      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={mdComponents}>{stripBrokenImages(prepareMath(msg.text))}</ReactMarkdown>
     </div>
   );
 });
@@ -109,14 +131,14 @@ export const PlotMessageItem = memo(function PlotMessageItem({ msg }: { msg: Cha
 });
 
 export const QuotaMessageItem = memo(function QuotaMessageItem({ msg }: { msg: ChatMessage }) {
-  const hasProFeatures = msg.userPlan === "pro" || msg.userPlan === "beta";
+  const hasProFeatures = msg.userPlan === "pro" || msg.userPlan === "max";
   return (
     <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-2.5">
       <p className="text-[15px] font-semibold text-red-400">{msg.text}</p>
       <p className="text-[13px] text-text-secondary">
         {hasProFeatures
           ? "Your weekly credits have been used up. They reset every 7 days."
-          : "Upgrade to Pro for 10x more weekly credits, LLM-powered transforms, and larger datasets."}
+          : "Upgrade to Pro for 10x more weekly credits, more AI models, and larger datasets."}
       </p>
       <Link
         href="/plans"

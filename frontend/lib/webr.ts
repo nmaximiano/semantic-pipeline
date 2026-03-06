@@ -108,7 +108,7 @@ export async function evalR(code: string): Promise<EvalResult> {
   // Promote R errors that landed in stderr (e.g. dplyr condition errors)
   const stderrStr = stderr.join("\n");
   if (!error && stderrStr) {
-    const errorMatch = stderrStr.match(/Error(?:\s+in\s+[^:]*)?:\s*.+/);
+    const errorMatch = stderrStr.match(/Error(?:\s+in\s+[^:]*)?:\s*[\s\S]+/);
     if (errorMatch) {
       error = errorMatch[0];
     }

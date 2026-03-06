@@ -9,10 +9,10 @@ import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/useTheme";
 import { useRuntime } from "@/lib/useRuntime";
 import RuntimeToast from "@/components/RuntimeToast";
-import SettingsMenu from "@/components/SettingsMenu";
-import FeedbackWidget from "@/components/FeedbackWidget";
+import SettingsMenu, { type UsageInfo } from "@/components/SettingsMenu";
 import * as sessions from "@/lib/sessions";
 import * as datasets from "@/lib/datasets";
+import { setPendingUploads } from "@/lib/pendingUploads";
 import type { Session } from "@supabase/supabase-js";
 import { API } from "@/lib/api";
 import { flushCheckpoint } from "@/lib/duckdb";
@@ -153,6 +153,7 @@ function DashboardContent() {
   }, []);
 
   const [plan, setPlan] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   // Sessions state
@@ -262,6 +263,7 @@ function DashboardContent() {
       if (res.ok) {
         const data = await res.json();
         setPlan(data.plan);
+        setUsage({ credits_used: data.credits_used, credits_limit: data.credits_limit, period_start: data.period_start });
       }
     } catch (e) {
       console.error("[dashboard] fetchAccount failed:", e);
@@ -279,7 +281,7 @@ function DashboardContent() {
 
   function handleModalFiles(files: FileList | null) {
     if (!files) return;
-    const validExts = ["csv", "tsv", "parquet"];
+    const validExts = ["csv", "tsv", "parquet", "dta", "rdata", "rda", "rds"];
     const newFiles: { file: File; name: string }[] = [];
     for (const f of Array.from(files)) {
       const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
@@ -299,13 +301,29 @@ function DashboardContent() {
     setCreatingSession(true);
     try {
       const name = newSessionName.trim() || "Untitled session";
+      const rExts = ["dta", "rdata", "rda", "rds"];
+      const duckdbFiles = pendingFiles.filter((pf) => {
+        const ext = pf.name.split(".").pop()?.toLowerCase() ?? "";
+        return !rExts.includes(ext);
+      });
+      const rFiles = pendingFiles.filter((pf) => {
+        const ext = pf.name.split(".").pop()?.toLowerCase() ?? "";
+        return rExts.includes(ext);
+      });
+
       const datasetIds: string[] = [];
-      for (const pf of pendingFiles) {
+      for (const pf of duckdbFiles) {
         const bytes = new Uint8Array(await pf.file.arrayBuffer());
         const ds = await datasets.createDataset(pf.name, bytes);
         datasetIds.push(ds.id);
       }
       const sid = await sessions.createSession(name, datasetIds);
+
+      // Defer R-format files to session view (needs WebR)
+      if (rFiles.length > 0) {
+        setPendingUploads(sid, rFiles.map((pf) => pf.file));
+      }
+
       router.push(`/sessions/${sid}`);
       // Keep modal open with "Creating..." state — navigation will unmount it
     } catch (e) {
@@ -400,9 +418,6 @@ function DashboardContent() {
                 <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
-            <span className="text-[10px] font-[family-name:var(--font-geist-mono)] font-medium tracking-widest text-accent border border-accent/40 rounded px-1.5 py-0.5 leading-none">
-              BETA
-            </span>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -420,34 +435,32 @@ function DashboardContent() {
                 </svg>
               )}
             </button>
-            {plan === "beta" && (
-              <Link
-                href="/feedback"
-                className="text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-accent/20"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                </svg>
-                Give Feedback
-              </Link>
-            )}
+            <Link
+              href="/feedback"
+              className="text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-accent/20"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+              </svg>
+              Give Feedback
+            </Link>
             <Link
               href="/plans"
               className={`text-xs font-medium rounded-full px-2.5 py-1 border inline-flex items-center transition-colors cursor-pointer ${
-                plan === "pro"
-                  ? "pro-badge"
-                  : plan === "beta"
-                    ? "beta-badge"
+                plan === "max"
+                  ? "max-badge"
+                  : plan === "pro"
+                    ? "pro-badge"
                     : "border-border bg-surface-alt text-text-secondary hover:border-accent/40"
               }`}
             >
               {plan !== null ? (
-                plan === "pro" ? "Pro" : plan === "beta" ? "Beta" : "Free"
+                plan === "max" ? "Max" : plan === "pro" ? "Pro" : "Free"
               ) : (
                 <span className="inline-block h-3 w-7 rounded animate-shimmer" />
               )}
             </Link>
-            <SettingsMenu email={session?.user?.email ?? ""} onLogout={handleLogout} onClearData={handleClearData} plan={plan ?? undefined} />
+            <SettingsMenu email={session?.user?.email ?? ""} onLogout={handleLogout} onClearData={handleClearData} plan={plan ?? undefined} usage={usage} />
           </div>
         </div>
       </nav>
@@ -687,7 +700,6 @@ function DashboardContent() {
       </div>
 
       <RuntimeToast status={runtimeStatus} progress={runtimeProgress} duckdbReady={duckdbReady} />
-      <FeedbackWidget plan={plan} />
 
       {/* New Session Modal */}
       {showNewSessionModal && (
@@ -748,12 +760,12 @@ function DashboardContent() {
                   Drop files here, or{" "}
                   <span className="text-accent font-medium">browse</span>
                 </p>
-                <p className="text-xs text-text-muted/50 mt-0.5">CSV, TSV, Parquet</p>
+                <p className="text-xs text-text-muted/50 mt-0.5">CSV, TSV, Parquet, Stata (.dta), RData</p>
               </div>
               <input
                 ref={modalFileRef}
                 type="file"
-                accept=".csv,.tsv,.parquet"
+                accept=".csv,.tsv,.parquet,.dta,.rdata,.rda,.rds"
                 multiple
                 className="hidden"
                 onChange={(e) => { handleModalFiles(e.target.files); if (modalFileRef.current) modalFileRef.current.value = ""; }}

@@ -1,11 +1,5 @@
 export type { ObjectRegistryEntry, DatasetMeta } from "@/lib/registry";
 
-export interface PlanStepData {
-  id: number;
-  description: string;
-  status: "pending" | "done";
-}
-
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "tool" | "plan" | "quota" | "plot";
@@ -15,7 +9,8 @@ export interface ChatMessage {
   toolArgs?: Record<string, any>;
   toolStatus?: "running" | "completed";
   progress?: number;
-  planSteps?: PlanStepData[];
+  planSteps?: string[];
+  planActive?: boolean;
   imageSrc?: string;
   askId?: string;
   askQuestion?: string;

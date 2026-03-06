@@ -35,14 +35,18 @@ export function useAgentChat(sessionId: string, duckdbReady: boolean) {
     [flushMessages]
   );
 
-  // Auto-scroll chat panel to bottom when messages change or typing indicator appears
+  // Auto-scroll chat panel to bottom when messages change or typing indicator appears.
+  // Use instant scroll while streaming (smooth scroll animations stack and jitter at ~60 calls/s).
   useEffect(() => {
     const el = messagesEndRef.current;
     if (!el) return;
     const scrollContainer = el.closest("[data-chat-scroll]");
-    if (scrollContainer) {
-      scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: "smooth" });
-    }
+    if (!scrollContainer) return;
+    const isStreaming = messages.some((m) => m.isStreaming);
+    scrollContainer.scrollTo({
+      top: scrollContainer.scrollHeight,
+      behavior: isStreaming ? "auto" : "smooth",
+    });
   }, [messages, isTyping]);
 
   // Load saved chat history on mount

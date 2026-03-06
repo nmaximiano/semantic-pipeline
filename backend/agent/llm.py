@@ -42,5 +42,6 @@ async def tool_completion_stream(messages: list[dict], tools: list[dict],
         tools=tools,
         temperature=temperature,
         stream=True,
+        stream_options={"include_usage": True},
         extra_body={"provider": {"sort": "latency"}},
     )

@@ -2,7 +2,13 @@ __pycache__/
 venv/
 .venv/
 .env
+.env.local
+.env.sentry-build-plugin
 node_modules/
 .next/
 *.pyc
+*.log
+.DS_Store
 .mcp.json
+backend/conversations/
+backend/reports_tool/downloads/

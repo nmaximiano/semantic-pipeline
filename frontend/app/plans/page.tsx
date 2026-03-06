@@ -7,7 +7,6 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/useTheme";
 import SettingsMenu from "@/components/SettingsMenu";
-import FeedbackWidget from "@/components/FeedbackWidget";
 import type { Session } from "@supabase/supabase-js";
 import { API, getAccessToken } from "@/lib/api";
 import { flushCheckpoint } from "@/lib/duckdb";
@@ -17,8 +16,6 @@ interface AccountInfo {
   email: string;
   credits_used: number;
   credits_limit: number;
-  transform_rows_used: number;
-  transform_rows_limit: number;
   max_datasets: number | null;
   max_rows_per_dataset: number;
   max_storage_bytes: number;
@@ -73,7 +70,7 @@ export default function CreditsPage() {
     }
   }
 
-  async function handleUpgrade() {
+  async function handleUpgrade(targetPlan: "pro" | "max") {
     if (!session) return;
     setError("");
     setUpgrading(true);
@@ -84,7 +81,9 @@ export default function CreditsPage() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({ plan: targetPlan }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
@@ -159,45 +158,26 @@ export default function CreditsPage() {
           </div>
         </nav>
         <main className="flex-1 overflow-auto bg-surface-alt flex items-center justify-center">
-          <div className="max-w-4xl w-full mx-auto px-6 py-12">
+          <div className="max-w-6xl w-full mx-auto px-6 py-12">
             {/* Plan cards skeleton */}
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* Free card skeleton */}
-              <div className="rounded-2xl border border-border bg-surface p-9 flex flex-col">
-                <div className="mb-7">
-                  <div className="h-4 w-10 rounded animate-shimmer" />
-                  <div className="mt-4 h-12 w-16 rounded animate-shimmer" />
-                </div>
-                <div className="space-y-4 flex-1">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between py-2">
-                      <div className="h-4 w-28 rounded animate-shimmer" />
-                      <div className="h-4 w-16 rounded animate-shimmer" />
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-8 h-12 w-full rounded-xl animate-shimmer" />
-              </div>
-              {/* Pro card skeleton */}
-              <div className="rounded-2xl border border-border bg-surface p-9 flex flex-col">
-                <div className="mb-7">
-                  <div className="h-4 w-8 rounded animate-shimmer" />
-                  <div className="mt-4 h-12 w-16 rounded animate-shimmer" />
-                </div>
-                <div className="space-y-4 flex-1">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between py-2">
-                      <div className="h-4 w-28 rounded animate-shimmer" />
-                      <div className="h-4 w-16 rounded animate-shimmer" />
-                    </div>
-                  ))}
-                  <div className="pt-3 border-t border-border">
-                    <div className="h-4 w-28 rounded animate-shimmer" />
-                    <div className="h-3.5 w-52 rounded animate-shimmer mt-2" />
+            <div className="grid md:grid-cols-3 gap-6">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="rounded-2xl border border-border bg-surface p-9 flex flex-col">
+                  <div className="mb-7">
+                    <div className="h-4 w-10 rounded animate-shimmer" />
+                    <div className="mt-4 h-12 w-16 rounded animate-shimmer" />
                   </div>
+                  <div className="space-y-4 flex-1">
+                    {[0, 1, 2, 3].map((j) => (
+                      <div key={j} className="flex items-center justify-between py-2">
+                        <div className="h-4 w-28 rounded animate-shimmer" />
+                        <div className="h-4 w-16 rounded animate-shimmer" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-8 h-12 w-full rounded-xl animate-shimmer" />
                 </div>
-                <div className="mt-8 h-12 w-full rounded-xl animate-shimmer" />
-              </div>
+              ))}
             </div>
             <div className="h-4 w-64 rounded animate-shimmer mx-auto mt-7" />
           </div>
@@ -207,8 +187,8 @@ export default function CreditsPage() {
   }
 
   const isPro = account?.plan === "pro";
-  const isBeta = account?.plan === "beta";
-  const hasProFeatures = isPro || isBeta;
+  const isMax = account?.plan === "max";
+  const hasProFeatures = isPro || isMax;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -220,9 +200,6 @@ export default function CreditsPage() {
                 <span className="text-accent font-bold">R</span><span className="text-text">·Base</span>
               </span>
             </Link>
-            <span className="text-[10px] font-[family-name:var(--font-geist-mono)] font-medium tracking-widest text-accent border border-accent/40 rounded px-1.5 py-0.5 leading-none">
-              BETA
-            </span>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -240,17 +217,15 @@ export default function CreditsPage() {
                 </svg>
               )}
             </button>
-            {account?.plan === "beta" && (
-              <Link
-                href="/feedback"
-                className="text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-accent/20"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                </svg>
-                Give Feedback
-              </Link>
-            )}
+            <Link
+              href="/feedback"
+              className="text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-accent/20"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+              </svg>
+              Give Feedback
+            </Link>
             <Link
               href="/dashboard"
               className="bg-accent text-white text-xs font-medium px-4 py-1.5 rounded-lg hover:bg-accent-hover transition-colors"
@@ -263,7 +238,7 @@ export default function CreditsPage() {
       </nav>
 
       <main className="flex-1 overflow-auto bg-surface-alt relative flex items-center justify-center">
-        <div className="max-w-4xl mx-auto px-6 py-12 relative">
+        <div className="max-w-6xl mx-auto px-6 py-12 relative">
           {/* Error banner */}
           {error && (
             <div className="mb-6 flex items-center gap-3 bg-error-bg border border-error-border text-error rounded-xl px-4 py-3 text-sm max-w-lg mx-auto">
@@ -274,8 +249,8 @@ export default function CreditsPage() {
             </div>
           )}
 
-          {/* Side-by-side plan cards */}
-          <div className="grid md:grid-cols-2 gap-8">
+          {/* Plan cards */}
+          <div className="grid md:grid-cols-3 gap-6">
             {/* Free card */}
             <div
               className={`rounded-2xl border bg-surface p-9 flex flex-col relative overflow-hidden transition-shadow ${
@@ -288,7 +263,7 @@ export default function CreditsPage() {
                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-accent/40" />
               )}
 
-              <div className="mb-7">
+              <div className="mb-7 min-h-[120px]">
                 <div className="flex items-center justify-between">
                   <span className="text-base font-medium text-text-secondary uppercase tracking-wider">
                     Free
@@ -310,6 +285,10 @@ export default function CreditsPage() {
                 <FeatureRow label="Datasets" value="5" />
                 <FeatureRow label="Rows per dataset" value="100K" />
                 <FeatureRow label="Storage" value="50 MB" />
+                <div className="pt-3 border-t border-border">
+                  <span className="text-base font-semibold text-text-secondary">2 AI Models</span>
+                  <p className="text-sm text-text-secondary mt-1">Basic models for simple tasks</p>
+                </div>
               </div>
 
               {hasProFeatures ? (
@@ -328,30 +307,26 @@ export default function CreditsPage() {
 
             {/* Pro card */}
             <div
-              className={`rounded-2xl bg-surface p-9 flex flex-col relative transition-shadow ${
-                hasProFeatures
-                  ? isBeta
-                    ? "border border-[var(--color-beta-border)] shadow-md shadow-purple-500/5"
-                    : "border border-accent/50 shadow-md shadow-accent/5 rainbow-glow-card"
-                  : "border-transparent rainbow-glow-card"
-              }`}
+              className={`rounded-2xl bg-surface p-9 flex flex-col relative transition-shadow border-transparent rainbow-glow-card`}
             >
-              <div className="mb-7">
+              <div className="mb-7 min-h-[120px]">
                 <div className="flex items-center justify-between">
-                  <span className={`text-base font-medium uppercase tracking-wider ${isBeta ? "text-[var(--color-beta)]" : "text-accent"}`}>
-                    {isBeta ? "Beta" : "Pro"}
+                  <span className="text-base font-medium uppercase tracking-wider text-accent">
+                    Pro
                   </span>
-                  {hasProFeatures && (
-                    <span className={`text-[11px] font-semibold uppercase tracking-wider rounded-full px-2.5 py-0.5 ${
-                      isBeta ? "text-[var(--color-beta)] bg-[var(--color-beta-bg)]" : "text-accent bg-accent/10"
-                    }`}>
+                  {isPro ? (
+                    <span className="text-[11px] font-semibold uppercase tracking-wider rounded-full px-2.5 py-0.5 text-accent bg-accent/10">
                       Current plan
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-semibold uppercase tracking-wider rounded-full px-2.5 py-0.5 text-white bg-accent">
+                      Popular
                     </span>
                   )}
                 </div>
                 <div className="mt-4 flex items-baseline gap-1.5">
-                  <span className="text-5xl font-bold text-text tracking-tight">{isBeta ? "Free" : "$9"}</span>
-                  {!isBeta && <span className="text-base text-text-muted">/month</span>}
+                  <span className="text-5xl font-bold text-text tracking-tight">$9</span>
+                  <span className="text-base text-text-muted">/month</span>
                 </div>
               </div>
 
@@ -361,16 +336,72 @@ export default function CreditsPage() {
                 <FeatureRow label="Rows per dataset" value="500K" highlight valueBold />
                 <FeatureRow label="Storage" value="1 GB" highlight valueBold />
                 <div className="pt-3 border-t border-border">
-                  <span className="text-base font-semibold text-accent">LLM Transforms</span>
-                  <p className="text-sm text-text-secondary mt-1">Generate, classify, and enrich columns with LLMs</p>
+                  <span className="text-base font-semibold text-accent">7 AI Models</span>
+                  <p className="text-sm text-text-secondary mt-1">A wide selection of price-performance balanced models</p>
                 </div>
               </div>
 
-              {isBeta ? (
-                <div className="mt-8 w-full py-3 rounded-xl text-base font-medium text-center text-[var(--color-beta)] border border-[var(--color-beta-border)] bg-[var(--color-beta-bg)]">
-                  You&apos;re a beta tester
+              {isPro ? (
+                <button
+                  onClick={handleManageBilling}
+                  disabled={managingBilling}
+                  className="mt-8 w-full py-3 rounded-xl text-base font-medium border border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {managingBilling
+                    ? "Opening billing portal..."
+                    : "Manage subscription"}
+                </button>
+              ) : isMax ? (
+                <div className="mt-8 w-full py-3 rounded-xl text-base font-medium text-center text-text-muted border border-border bg-surface-alt">
+                  Included in Max
                 </div>
-              ) : isPro ? (
+              ) : (
+                <button
+                  onClick={() => handleUpgrade("pro")}
+                  disabled={upgrading}
+                  className="mt-8 w-full py-3 rounded-xl text-base font-medium bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {upgrading ? "Redirecting to checkout..." : "Upgrade to Pro"}
+                </button>
+              )}
+            </div>
+
+            {/* Max card */}
+            <div
+              className={`rounded-2xl bg-surface p-9 flex flex-col relative transition-shadow border-transparent orange-glow-card ${
+                isMax ? "shadow-md shadow-orange-500/5" : ""
+              }`}
+            >
+              <div className="mb-7 min-h-[120px]">
+                <div className="flex items-center justify-between">
+                  <span className={`text-base font-medium uppercase tracking-wider ${isMax ? "text-[var(--color-max)]" : "text-text-secondary"}`}>
+                    Max
+                  </span>
+                  {isMax && (
+                    <span className="text-[11px] font-semibold uppercase tracking-wider rounded-full px-2.5 py-0.5 text-[var(--color-max)] bg-[var(--color-max-bg)]">
+                      Current plan
+                    </span>
+                  )}
+                </div>
+                <div className="mt-4 flex items-baseline gap-1.5">
+                  <span className="text-5xl font-bold text-text tracking-tight">$19</span>
+                  <span className="text-base text-text-muted">/month</span>
+                </div>
+                <p className="mt-2 text-sm font-medium text-[var(--color-max)]">200% value</p>
+              </div>
+
+              <div className="space-y-4 flex-1">
+                <FeatureRow label="Messages" value="2,000 / week" highlight valueBold />
+                <FeatureRow label="Datasets" value="Unlimited" highlight valueBold />
+                <FeatureRow label="Rows per dataset" value="2M" highlight valueBold />
+                <FeatureRow label="Storage" value="4 GB" highlight valueBold />
+                <div className="pt-3 border-t border-border">
+                  <span className="text-base font-semibold text-accent">All 11 AI Models</span>
+                  <p className="text-sm text-text-secondary mt-1">The smartest and newest models including Claude Opus and GPT-5.4</p>
+                </div>
+              </div>
+
+              {isMax ? (
                 <button
                   onClick={handleManageBilling}
                   disabled={managingBilling}
@@ -381,21 +412,22 @@ export default function CreditsPage() {
                     : "Manage subscription"}
                 </button>
               ) : (
-                <div className="mt-8 w-full py-3 rounded-xl text-base font-medium text-center text-text-muted border border-border bg-surface-alt">
-                  Coming soon
-                </div>
+                <button
+                  onClick={() => handleUpgrade("max")}
+                  disabled={upgrading}
+                  className="mt-8 w-full py-3 rounded-xl text-base font-medium bg-[var(--color-max)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {upgrading ? "Redirecting to checkout..." : "Upgrade to Max"}
+                </button>
               )}
             </div>
           </div>
 
-          {isPro && (
-            <p className="text-sm text-text-muted text-center mt-7">
-              Payments processed securely by Stripe &middot; Cancel anytime
-            </p>
-          )}
+          <p className="text-sm text-text-muted text-center mt-7">
+            Payments processed securely by Stripe &middot; Cancel anytime
+          </p>
         </div>
       </main>
-      <FeedbackWidget plan={account?.plan ?? null} />
     </div>
   );
 }

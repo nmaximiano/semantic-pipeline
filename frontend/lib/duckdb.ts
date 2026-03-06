@@ -196,6 +196,13 @@ export async function initDuckDB(userId?: string): Promise<void> {
       )
     `);
 
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS _user_preferences (
+        key VARCHAR PRIMARY KEY,
+        value VARCHAR NOT NULL
+      )
+    `);
+
     // Add plots column to _chat_history (for existing installs)
     try {
       await conn.query(`ALTER TABLE _chat_history ADD COLUMN plots TEXT`);

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Source_Code_Pro } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 
@@ -10,6 +10,11 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const sourceCodePro = Source_Code_Pro({
+  variable: "--font-source-code-pro",
   subsets: ["latin"],
 });
 
@@ -45,7 +50,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${clashDisplay.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${sourceCodePro.variable} ${clashDisplay.variable} antialiased`}
         style={{ "--clash-weight": CLASH_WEIGHT } as React.CSSProperties}
       >
         {children}

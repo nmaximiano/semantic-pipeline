@@ -43,6 +43,11 @@ const MAX_PERSISTED_ENTRIES = 200;
 /** Lines of output before collapsing */
 const COLLAPSE_THRESHOLD = 6;
 
+/** Terminal-safe monospace font stack for R output alignment. */
+const OUTPUT_FONT: React.CSSProperties = {
+  fontFamily: 'var(--font-source-code-pro), "Source Code Pro", ui-monospace, monospace',
+};
+
 /* ─── R syntax highlighting ─────────────────────────────────────────── */
 
 const R_KEYWORDS = new Set([
@@ -63,7 +68,7 @@ const R_TOKEN_RE = new RegExp(
   "g"
 );
 
-function highlightR(code: string): ReactNode[] {
+export function highlightR(code: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
 
@@ -200,11 +205,11 @@ function CollapsibleOutput({
   const needsCollapse = lines.length > COLLAPSE_THRESHOLD;
 
   if (!needsCollapse) {
-    return <div className={className}>{text}</div>;
+    return <div className={className} style={OUTPUT_FONT}>{text}</div>;
   }
 
   return (
-    <div className={className}>
+    <div className={className} style={OUTPUT_FONT}>
       {expanded ? text : lines.slice(0, COLLAPSE_THRESHOLD).join("\n")}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -271,6 +276,11 @@ const RConsole = forwardRef<RConsoleHandle, RConsoleProps>(
     useEffect(() => {
       scrollToBottom();
     }, [history, scrollToBottom]);
+
+    // Refocus textarea when execution finishes
+    useEffect(() => {
+      if (!isRunning) inputRef.current?.focus();
+    }, [isRunning]);
 
     /** Auto-resize the textarea to fit content */
     const autoResize = useCallback(() => {
@@ -341,9 +351,7 @@ const RConsole = forwardRef<RConsoleHandle, RConsoleProps>(
           // Reset textarea height after submit
           requestAnimationFrame(() => {
             const ta = inputRef.current;
-            if (ta) {
-              ta.style.height = "auto";
-            }
+            if (ta) ta.style.height = "auto";
           });
         }
       }
@@ -365,74 +373,71 @@ const RConsole = forwardRef<RConsoleHandle, RConsoleProps>(
     );
 
     return (
-      <div className="h-full flex flex-col bg-surface font-mono text-[12px]">
-        {/* Scrollable output area */}
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 leading-snug select-text"
-          onClick={handleOutputClick}
-        >
-          {history.length === 0 && (
-            <div className="text-text-muted">
-              R console ready. Type R commands and press Enter.
-            </div>
-          )}
-          {history.map((entry, i) => {
-            if (entry.type === "input") {
-              return (
-                <CopyableEntry key={i} text={entry.text!}>
-                  <div className="flex gap-1.5 min-w-0 mt-1 first:mt-0">
-                    <span className={`shrink-0 select-none ${
-                      entry.source === "agent" ? "text-accent" : "text-emerald-500"
-                    }`}>
-                      {entry.source === "agent" ? "agent >" : "user >"}
-                    </span>
-                    <span className="whitespace-pre-wrap break-all min-w-0">
-                      {highlightR(entry.text!)}
-                    </span>
-                  </div>
-                </CopyableEntry>
-              );
-            }
-            if (entry.type === "output") {
-              return (
-                <CopyableEntry key={i} text={entry.text!}>
-                  <CollapsibleOutput
-                    text={entry.text!}
-                    className="whitespace-pre-wrap break-words text-text-secondary pl-4"
-                  />
-                </CopyableEntry>
-              );
-            }
-            if (entry.type === "error") {
-              return (
-                <CopyableEntry key={i} text={entry.text!}>
-                  <CollapsibleOutput
-                    text={entry.text!}
-                    className="whitespace-pre-wrap break-words text-error/80 pl-4"
-                  />
-                </CopyableEntry>
-              );
-            }
-            if (entry.type === "plot" && entry.image) {
-              return <PlotCanvas key={i} image={entry.image} />;
-            }
-            return null;
-          })}
-          {isRunning && (
-            <div className="text-text-muted animate-pulse mt-1.5">
-              Running...
-            </div>
-          )}
-        </div>
+      <div
+        ref={scrollRef}
+        className="h-full overflow-y-auto overflow-x-auto bg-surface font-mono text-sm px-3 py-2 leading-normal select-text"
+        onClick={handleOutputClick}
+      >
+        {history.length === 0 && (
+          <div className="text-text-muted">
+            R console ready. Type R commands and press Enter.
+          </div>
+        )}
+        {history.map((entry, i) => {
+          if (entry.type === "input") {
+            return (
+              <CopyableEntry key={i} text={entry.text!}>
+                <div className="flex gap-1.5 min-w-0 mt-1 first:mt-0" style={OUTPUT_FONT}>
+                  <span className={`shrink-0 select-none ${
+                    entry.source === "agent" ? "text-accent" : "text-emerald-500"
+                  }`}>
+                    {entry.source === "agent" ? "agent >" : "user >"}
+                  </span>
+                  <span className="whitespace-pre-wrap break-words min-w-0">
+                    {highlightR(entry.text!)}
+                  </span>
+                </div>
+              </CopyableEntry>
+            );
+          }
+          if (entry.type === "output") {
+            return (
+              <CopyableEntry key={i} text={entry.text!}>
+                <CollapsibleOutput
+                  text={entry.text!}
+                  className="whitespace-pre text-text"
+                />
+              </CopyableEntry>
+            );
+          }
+          if (entry.type === "error") {
+            return (
+              <CopyableEntry key={i} text={entry.text!}>
+                <CollapsibleOutput
+                  text={entry.text!}
+                  className="whitespace-pre text-error/80"
+                />
+              </CopyableEntry>
+            );
+          }
+          if (entry.type === "plot" && entry.image) {
+            return <PlotCanvas key={i} image={entry.image} />;
+          }
+          return null;
+        })}
+        {isRunning && (
+          <div className="text-text-muted animate-pulse mt-1.5">
+            Running...
+          </div>
+        )}
 
-        {/* Input area — pinned to bottom */}
-        <div className="bg-surface border-t border-border px-3 py-2">
-          <div className="flex gap-1.5 items-start">
-            <span className="text-emerald-500 select-none shrink-0 leading-snug pt-px">&gt;</span>
+        {/* Input area — inline at bottom of scroll */}
+        <div className="mt-2 pb-4">
+          <div className="flex gap-1.5 items-start" style={OUTPUT_FONT}>
+            <span className="text-emerald-500 select-none shrink-0 leading-normal pt-px">&gt;</span>
             <textarea
               ref={inputRef}
-              rows={1}
+              rows={3}
               value={input}
               onChange={handleInputChange}
               onFocus={scrollToBottom}
@@ -441,7 +446,7 @@ const RConsole = forwardRef<RConsoleHandle, RConsoleProps>(
               spellCheck={false}
               autoComplete="off"
               autoCorrect="off"
-              className="flex-1 bg-transparent text-[12px] font-mono text-text placeholder:text-text-muted/50 focus:outline-none disabled:opacity-50 caret-emerald-500 resize-none leading-snug overflow-hidden"
+              className="flex-1 bg-transparent text-sm text-text placeholder:text-text-muted/50 focus:outline-none disabled:opacity-50 caret-emerald-500 resize-none leading-normal"
               placeholder={isRunning ? "Running..." : ""}
             />
             {isRunning && (

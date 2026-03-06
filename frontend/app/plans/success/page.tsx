@@ -59,6 +59,7 @@ export default function SubscriptionSuccess() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmedPlan, setConfirmedPlan] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -76,7 +77,7 @@ export default function SubscriptionSuccess() {
       }
       setSession(session);
       setAuthLoading(false);
-      pollForPro(session.access_token);
+      pollForUpgrade(session.access_token);
     });
 
     const {
@@ -93,7 +94,7 @@ export default function SubscriptionSuccess() {
   }, [router]);
 
   // Poll account a few times to confirm webhook processed the upgrade
-  function pollForPro(token: string) {
+  function pollForUpgrade(token: string) {
     const attempts = [1000, 3000, 6000, 10000];
     const timeouts = attempts.map((delay) =>
       setTimeout(async () => {
@@ -103,10 +104,13 @@ export default function SubscriptionSuccess() {
           });
           if (res.ok) {
             const data = await res.json();
-            if (data.plan === "pro") setConfirmed(true);
+            if (data.plan === "pro" || data.plan === "max") {
+              setConfirmed(true);
+              setConfirmedPlan(data.plan);
+            }
           }
         } catch (e) {
-          console.error("[plans/success] pollForPro failed:", e);
+          console.error("[plans/success] pollForUpgrade failed:", e);
         }
       }, delay)
     );
@@ -192,7 +196,7 @@ export default function SubscriptionSuccess() {
       <main className="flex-1 flex items-center justify-center bg-surface-alt px-4 relative overflow-hidden">
         <div className="w-full max-w-sm relative">
           <ConfettiBlast />
-          <div className="animate-in rounded-2xl bg-surface shadow-sm p-8 text-center relative overflow-hidden rainbow-glow-card border-transparent">
+          <div className={`animate-in rounded-2xl bg-surface shadow-sm p-8 text-center relative overflow-hidden border-transparent ${confirmedPlan === "max" ? "orange-glow-card" : "rainbow-glow-card"}`}>
             <svg
               className="w-10 h-10 text-accent mx-auto mb-5"
               fill="currentColor"
@@ -202,19 +206,19 @@ export default function SubscriptionSuccess() {
             </svg>
 
             <h1 className="text-xl font-semibold text-text">
-              Welcome to Pro!
+              Welcome to {confirmedPlan === "max" ? "Max" : "Pro"}!
             </h1>
             <p className="mt-2 text-sm text-text-muted">
-              Your subscription is active. You now have access to all Pro features.
+              Your subscription is active. You now have access to all {confirmedPlan === "max" ? "Max" : "Pro"} features.
             </p>
 
             {confirmed ? (
               <p className="mt-4 text-sm">
-                <span className="inline-flex items-center gap-1.5 font-medium text-accent">
+                <span className={`inline-flex items-center gap-1.5 font-medium ${confirmedPlan === "max" ? "text-[var(--color-max)]" : "text-accent"}`}>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
-                  Pro plan confirmed
+                  {confirmedPlan === "max" ? "Max" : "Pro"} plan confirmed
                 </span>
               </p>
             ) : (
