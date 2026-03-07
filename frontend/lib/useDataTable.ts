@@ -43,9 +43,13 @@ export function useDataTable(
         ? rowsData.columns[activeCell[1]] ?? ""
         : null;
 
+  // Suppress refetch during pagination reset (handleObjectTabClick already fetches)
+  const suppressRefetch = useRef(false);
+
   // Reset pagination on active object change
   useEffect(() => {
     if (duckdbReady && activeStableId) {
+      suppressRefetch.current = true;
       setPage(1);
       setSortCol(null);
       setSortDir("asc");
@@ -55,6 +59,10 @@ export function useDataTable(
 
   // Re-fetch rows when pagination/sort changes
   useEffect(() => {
+    if (suppressRefetch.current) {
+      suppressRefetch.current = false;
+      return;
+    }
     if (duckdbReady && activeStableId) {
       refetchRef.current?.({ activeStableId, page, perPage, sortCol: sortCol ?? undefined, sortDir });
     }

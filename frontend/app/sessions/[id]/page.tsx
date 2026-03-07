@@ -286,7 +286,7 @@ export default function SessionWorkspacePage() {
   // Bottom console panel — resizable height (always visible)
   const CONSOLE_MIN = 140;
   const CONSOLE_MAX = 600;
-  const CONSOLE_DEFAULT = 380;
+  const CONSOLE_DEFAULT = 280;
   const [consoleHeight, setConsoleHeight] = useState(CONSOLE_DEFAULT);
   const isDraggingConsole = useRef(false);
   const consoleDragStartY = useRef(0);
