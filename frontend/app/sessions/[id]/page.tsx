@@ -1338,7 +1338,7 @@ export default function SessionWorkspacePage() {
                 <div className="h-3 w-14 rounded animate-shimmer" />
               </div>
             </div>
-            <div className="shrink-0 bg-surface-alt" style={{ height: "380px" }}>
+            <div className="shrink-0 bg-surface-alt" style={{ height: "280px" }}>
               <div className="flex items-center gap-2 px-3 pt-2">
                 <div className="h-3 w-3 rounded animate-shimmer" />
                 <div className="h-3 w-48 rounded animate-shimmer" />
